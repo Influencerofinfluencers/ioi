@@ -45,6 +45,9 @@ SCHEMA = [
     """CREATE TABLE IF NOT EXISTS reports (
         id TEXT PRIMARY KEY, kind TEXT, title TEXT, markdown TEXT, created_at TEXT
     )""",
+    """CREATE TABLE IF NOT EXISTS social_posts (
+        id TEXT PRIMARY KEY, created_at TEXT, topic TEXT, text TEXT, results TEXT
+    )""",
     "CREATE INDEX IF NOT EXISTS posts_created ON posts (created_at)",
     "CREATE INDEX IF NOT EXISTS posts_labeled ON posts (labeled)",
 ]
@@ -94,6 +97,7 @@ MIGRATIONS = [  # columns added after v0.1; ignored when they already exist
     "ALTER TABLE labels ADD COLUMN format TEXT",
     "ALTER TABLE labels ADD COLUMN hook TEXT",
     "ALTER TABLE runs ADD COLUMN x_reads INTEGER DEFAULT 0",
+    "ALTER TABLE alerts ADD COLUMN teased_at TEXT",
 ]
 
 

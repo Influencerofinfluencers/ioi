@@ -191,3 +191,62 @@ def test_parse_json_salvages_truncated_reply():
     reply = '```json\n[\n{"i": 0, "topics": ["BTC"]},\n{"i": 1, "topics": ["ETH"]},\n{"i": 2, "top'
     out = parse_json(reply)
     assert [o["i"] for o in out] == [0, 1]
+
+
+def test_landing_teasers_and_social(env, monkeypatch):
+    from ioi import config, digest, influence, label, llm, notify, publish, social
+
+    db = env
+    seed_posts(db)
+    monkeypatch.setattr(llm, "complete", fake_complete)
+    label.label_pending()
+    digest.build()
+
+    # landing page: live data, no dead buttons without links
+    publish.build_site()
+    page = (config.PUBLIC_DIR / "index.html").read_text()
+    assert "Eric Balchunas" in page and "Pro opens soon" in page and "$" not in page.replace("$BTC", "")
+    assert (config.PUBLIC_DIR / "daily" / "index.html").exists()
+    monkeypatch.setattr(config, "PRO_CHECKOUT_URL", "https://whop.com/ioi/pro")
+    publish.build_site()
+    assert 'href="https://whop.com/ioi/pro"' in (config.PUBLIC_DIR / "index.html").read_text()
+
+    # pro teasers: only after the delay, once per alert
+    sent = []
+    monkeypatch.setattr(config, "TELEGRAM_PUBLIC_CHAT_ID", "-100")
+    monkeypatch.setattr(notify, "send", lambda chat, text, is_html=True: sent.append((chat, text)) or True)
+    influence.new_alerts()
+    assert notify.pro_teasers() == 0  # too fresh
+    db.run("UPDATE alerts SET created_at = :t", t=db.ago(hours=4))
+    assert notify.pro_teasers() == 2 and "whop.com/ioi/pro" in sent[-1][1]
+    assert notify.pro_teasers() == 0
+
+    # social: X gets no link + OAuth header, Bluesky gets a clickable link, no topic twice
+    monkeypatch.setattr(llm, "complete", lambda *a, **k: "📊 5 of our 50 accounts are on the BTC ETF. Eric Balchunas was first. https://spam.example @someone")
+    monkeypatch.setattr(config, "X_API_KEY", "k"); monkeypatch.setattr(config, "X_API_SECRET", "s")
+    monkeypatch.setattr(config, "X_ACCESS_TOKEN", "t"); monkeypatch.setattr(config, "X_ACCESS_SECRET", "ts")
+    monkeypatch.setattr(config, "BLUESKY_HANDLE", "ioi.bsky.social"); monkeypatch.setattr(config, "BLUESKY_APP_PASSWORD", "p")
+    calls = []
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        calls.append((url, json, headers))
+        req = httpx.Request("POST", url)
+        if url.endswith("/tweets"):
+            assert headers["Authorization"].startswith("OAuth ") and "oauth_signature" in headers["Authorization"]
+            assert "http" not in json["text"] and "@" not in json["text"]
+            return httpx.Response(201, json={"data": {"id": "9"}}, request=req)
+        if url.endswith("createSession"):
+            return httpx.Response(200, json={"accessJwt": "j", "did": "did:plc:me"}, request=req)
+        assert json["record"]["facets"][0]["features"][0]["uri"].startswith(config.SITE_URL)
+        return httpx.Response(200, json={"uri": "at://did:plc:me/app.bsky.feed.post/xyz"}, request=req)
+
+    monkeypatch.setattr(social.httpx, "post", fake_post)
+    r = social.run_once()
+    assert r["results"]["x"].endswith("/9") and r["results"]["bluesky"].endswith("/xyz") and r["results"]["telegram"] == "ok"
+    r2 = social.run_once()
+    assert r2.get("topic") != r["topic"]  # never the same topic twice in 24h
+
+    monkeypatch.setattr(llm, "complete", lambda *a, **k: "Buy now before it pumps")
+    db.run("DELETE FROM social_posts")
+    with pytest.raises(ValueError):
+        social.run_once()

@@ -1,5 +1,6 @@
 """Telegram bot: status messages to you, digest to the free channel, alerts to Pro."""
 import html
+import json
 import logging
 import re
 
@@ -71,3 +72,33 @@ def digest(md: str) -> bool:
 def alert(a: dict) -> bool:
     text = f"⚡ <b>{html.escape(a['topic'])}</b>\n{html.escape(a['message'])}\n<a href=\"{a['url']}\">First post</a>"
     return send(config.TELEGRAM_PRO_CHAT_ID, text)
+
+
+def pro_teasers() -> int:
+    """Free channel gets a delayed teaser of Pro alerts: proof that Pro is faster."""
+    from . import db
+
+    if not (config.PRO_CHECKOUT_URL and config.TELEGRAM_PUBLIC_CHAT_ID):
+        return 0
+    done_today = db.rows("SELECT COUNT(*) AS n FROM alerts WHERE teased_at >= :s", s=db.ago(hours=24))[0]["n"]
+    room = config.TEASERS_PER_DAY - done_today
+    if room <= 0:
+        return 0
+    due = db.rows(
+        """SELECT * FROM alerts WHERE teased_at IS NULL AND created_at <= :late AND created_at >= :early
+           ORDER BY created_at LIMIT :n""",
+        late=db.ago(hours=config.TEASER_DELAY_HOURS), early=db.ago(hours=24), n=room,
+    )
+    sent = 0
+    for a in due:
+        n = len(json.loads(a["accounts"] or "[]"))
+        text = (
+            f"⚡ <b>Pro members got this {config.TEASER_DELAY_HOURS}h ago</b> "
+            f"({a['created_at'][11:16]} UTC)\n"
+            f"<b>{html.escape(a['topic'])}</b>: {n} tracked accounts suddenly started talking about it.\n\n"
+            f'Get alerts the moment they happen: <a href="{config.PRO_CHECKOUT_URL}">IOI Pro</a>'
+        )
+        if send(config.TELEGRAM_PUBLIC_CHAT_ID, text):
+            db.run("UPDATE alerts SET teased_at = :t WHERE id = :id", t=db.iso(db.now()), id=a["id"])
+            sent += 1
+    return sent

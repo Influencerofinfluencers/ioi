@@ -3,7 +3,12 @@ name: daily (digest + website + RSS)
 on:
   schedule:
     - cron: "41 5 * * *" # 05:41 UTC = 06:41 Amsterdam (winter time)
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      publish_only:
+        description: "Only rebuild + deploy the website (no new digest, no Telegram post)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -35,6 +40,13 @@ jobs:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_STATUS_CHAT_ID: ${{ secrets.TELEGRAM_STATUS_CHAT_ID }}
       TELEGRAM_PUBLIC_CHAT_ID: ${{ secrets.TELEGRAM_PUBLIC_CHAT_ID }}
+      PRO_CHECKOUT_URL: ${{ vars.PRO_CHECKOUT_URL }}
+      PRO_PRICE: ${{ vars.PRO_PRICE || '€25' }}
+      FREE_CHANNEL_URL: ${{ vars.FREE_CHANNEL_URL }}
+      NEWSLETTER_URL: ${{ vars.NEWSLETTER_URL }}
+      CONTACT_URL: ${{ vars.CONTACT_URL }}
+      X_PROFILE_URL: ${{ vars.X_PROFILE_URL }}
+      BLUESKY_PROFILE_URL: ${{ vars.BLUESKY_PROFILE_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -43,6 +55,9 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - run: python -m ioi.cli daily
+        if: ${{ !inputs.publish_only }}
+      - run: python -m ioi.cli publish
+        if: ${{ inputs.publish_only }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: public

@@ -10,6 +10,7 @@ Commands
   publish         build website, leaderboard and RSS into ./public
   cycle           fetch + label + analyze   (every 30 minutes)
   daily           digest + publish + cleanup (once a day)
+  social          write + post one highlight on X, Bluesky and the free channel
   weekly          playbook: why the best posts of the week worked (Mondays)
   telegram-login  create TELEGRAM_SESSION (interactive, run once)
 """
@@ -35,7 +36,8 @@ def cmd_cycle(args):
     alerts = influence.new_alerts()
     for a in alerts:
         notify.alert(a)
-    stats = {"fetch": f, "label": lab, "alerts": [a["topic"] for a in alerts]}
+    teased = notify.pro_teasers()
+    stats = {"fetch": f, "label": lab, "alerts": [a["topic"] for a in alerts], "teasers": teased}
     db.log_run("cycle", started, stats)
     if f["errors"]:
         notify.status("IOI: fetch errors\n" + "\n".join(f["errors"][:10]))
@@ -124,6 +126,10 @@ def main(argv=None):
             _print(cmd_cycle(args))
         elif c == "daily":
             _print(cmd_daily(args))
+        elif c == "social":
+            from . import social
+
+            _print(social.run_once())
         elif c == "weekly":
             from . import publish, weekly
 

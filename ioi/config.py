@@ -74,6 +74,27 @@ TELEGRAM_STATUS_CHAT_ID = env("TELEGRAM_STATUS_CHAT_ID")  # your own chat: statu
 TELEGRAM_PUBLIC_CHAT_ID = env("TELEGRAM_PUBLIC_CHAT_ID")  # free channel: daily digest
 TELEGRAM_PRO_CHAT_ID = env("TELEGRAM_PRO_CHAT_ID")  # paid channel: realtime alerts
 
+# --- selling + growth (all optional; empty = that button/channel is hidden or skipped) ---
+PRO_CHECKOUT_URL = env("PRO_CHECKOUT_URL")  # Whop checkout link for IOI Pro
+PRO_PRICE = env("PRO_PRICE", "€25")
+FREE_CHANNEL_URL = env("FREE_CHANNEL_URL")  # public t.me link of the free channel
+NEWSLETTER_URL = env("NEWSLETTER_URL")  # beehiiv subscribe page (later)
+CONTACT_URL = env("CONTACT_URL")  # where "Request access" (Data API) goes
+X_PROFILE_URL = env("X_PROFILE_URL")
+BLUESKY_PROFILE_URL = env("BLUESKY_PROFILE_URL")
+TEASER_DELAY_HOURS = env_int("TEASER_DELAY_HOURS", 3)  # free channel sees Pro alerts this much later
+TEASERS_PER_DAY = env_int("TEASERS_PER_DAY", 3)
+
+# --- automatic social posts (highlights) ---
+SOCIAL_ENABLED = env("SOCIAL_ENABLED", "1") not in ("0", "false", "no", "")
+SOCIAL_MAX_PER_DAY = env_int("SOCIAL_MAX_PER_DAY", 3)
+X_API_KEY = env("X_API_KEY")  # OAuth 1.0a "consumer" key of the X app
+X_API_SECRET = env("X_API_SECRET")
+X_ACCESS_TOKEN = env("X_ACCESS_TOKEN")  # access token of the @IOI account (read+write)
+X_ACCESS_SECRET = env("X_ACCESS_SECRET")
+BLUESKY_HANDLE = env("BLUESKY_HANDLE")
+BLUESKY_APP_PASSWORD = env("BLUESKY_APP_PASSWORD")  # app password, never the main password
+
 # --- analysis ---
 ALERT_WINDOW_HOURS = env_int("ALERT_WINDOW_HOURS", 6)
 ALERT_MIN_ACCOUNTS = env_int("ALERT_MIN_ACCOUNTS", 4)

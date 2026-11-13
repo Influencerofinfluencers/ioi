@@ -1,0 +1,50 @@
+name: social (automatic highlight posts)
+
+on:
+  schedule:
+    # 3x a day, when crypto Twitter is busiest (UTC): 10:17, 14:47, 19:27
+    - cron: "17 10 * * *"
+    - cron: "47 14 * * *"
+    - cron: "27 19 * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: ioi-social
+  cancel-in-progress: false
+
+jobs:
+  social:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # emergency stop without code: set repository variable SOCIAL_ENABLED to 0
+    env:
+      NICHE: ${{ vars.NICHE || 'crypto' }}
+      SOCIAL_ENABLED: ${{ vars.SOCIAL_ENABLED || '1' }}
+      SOCIAL_MAX_PER_DAY: ${{ vars.SOCIAL_MAX_PER_DAY || '3' }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SITE_URL: ${{ vars.SITE_URL }}
+      BRAND: ${{ vars.BRAND || 'IOI - Influencer of Influencers' }}
+      LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'anthropic' }}
+      WRITE_PROVIDER: ${{ vars.WRITE_PROVIDER || vars.LLM_PROVIDER || 'anthropic' }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+      WRITE_MODEL: ${{ vars.WRITE_MODEL || 'claude-sonnet-5-5' }}
+      DIGEST_LANGUAGE: ${{ vars.DIGEST_LANGUAGE || 'English' }}
+      X_API_KEY: ${{ secrets.X_API_KEY }}
+      X_API_SECRET: ${{ secrets.X_API_SECRET }}
+      X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+      X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+      BLUESKY_HANDLE: ${{ vars.BLUESKY_HANDLE }}
+      BLUESKY_APP_PASSWORD: ${{ secrets.BLUESKY_APP_PASSWORD }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_STATUS_CHAT_ID: ${{ secrets.TELEGRAM_STATUS_CHAT_ID }}
+      TELEGRAM_PUBLIC_CHAT_ID: ${{ secrets.TELEGRAM_PUBLIC_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m ioi.cli social
