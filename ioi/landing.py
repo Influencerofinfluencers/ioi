@@ -132,11 +132,11 @@ $attention
 <div class="plans">
 <div class="plan"><h3 style="margin:0;font-size:22px">Free</h3><p style="margin:0"><span class="price">€0</span> <span class="soft">forever</span></p>
 <p class="soft" style="margin:0;font-size:15px">For anyone who wants the signal without the noise.</p>
-<ul><li>Daily brief on Telegram</li><li>RSS feed</li><li>IOI Top 50, updated daily</li><li>Pro alerts, a few hours later</li></ul>$free_btn</div>
+<ul><li>Daily brief on Telegram</li><li>RSS feed</li><li>IOI Top 50, updated daily</li><li>Pro alerts, $delay hours later</li></ul>$free_btn</div>
 <div class="plan pro"><div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0;font-size:22px">Pro</h3><span class="pill">Most popular</span></div>
 <p style="margin:0"><span class="price">$pro_price</span> <span style="color:#C9CED6">/ month</span></p>
 <p style="margin:0;font-size:15px;color:#C9CED6">For active traders and writers who want it first.</p>
-<ul><li>Real-time attention alerts (checked every 10 min)</li><li>Consensus and first-mover signals</li><li>Full weekly playbook</li><li>Cancel anytime</li></ul>$pro_btn</div>
+<ul><li>Real-time attention alerts, $delay hours before the free channel</li><li>Consensus and first-mover signals</li><li>Full weekly playbook</li><li>Cancel anytime</li></ul>$pro_btn</div>
 <div class="plan"><h3 style="margin:0;font-size:22px">Data API</h3><p style="margin:0"><span class="price">from €99</span> <span class="soft">/ month</span></p>
 <p class="soft" style="margin:0;font-size:15px">For bots, dashboards and funds.</p>
 <ul><li>JSON feeds and webhooks</li><li>Topic surges and first movers</li><li>Historical data</li><li>Commercial use</li></ul>$api_btn</div>
@@ -215,5 +215,5 @@ def build(latest_digest_md: str | None) -> str:
         platforms="".join(f"<span>{names.get(p, p)}</span>" for p in platforms),
         board=rows, issue=issue, free_btn=_btn(free_url, free_label, "dark", "Opening soon"),
         pro_price=esc(config.PRO_PRICE), pro_btn=pro_btn, api_btn=api_btn, final_cta=final,
-        disclaimer=esc(config.DISCLAIMER), footer_links=footer_links,
+        disclaimer=esc(config.DISCLAIMER), footer_links=footer_links, delay=config.TEASER_DELAY_HOURS,
     )

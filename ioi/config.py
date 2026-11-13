@@ -82,7 +82,7 @@ NEWSLETTER_URL = env("NEWSLETTER_URL")  # beehiiv subscribe page (later)
 CONTACT_URL = env("CONTACT_URL")  # where "Request access" (Data API) goes
 X_PROFILE_URL = env("X_PROFILE_URL")
 BLUESKY_PROFILE_URL = env("BLUESKY_PROFILE_URL")
-TEASER_DELAY_HOURS = env_int("TEASER_DELAY_HOURS", 3)  # free channel sees Pro alerts this much later
+TEASER_DELAY_HOURS = env_int("TEASER_DELAY_HOURS", 4)  # free channel sees Pro alerts this much later
 TEASERS_PER_DAY = env_int("TEASERS_PER_DAY", 3)
 
 # --- Whop (IOI Pro access) - the key is read-only: members + member e-mails ---
