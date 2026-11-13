@@ -177,13 +177,16 @@ def cmd_loop(args):
             break
         until = time.time() + max(5, wait)
         while time.time() < until:  # buttons + Pro e-mails answered within ~30 s
-            time.sleep(min(30, max(1, until - time.time())))
             try:
                 from . import pro
 
-                pro.poll()
+                if until - time.time() > 35:
+                    pro.poll()  # long poll ~25 s, answers instantly
+                else:
+                    time.sleep(max(1, until - time.time()))
             except Exception as e:  # noqa: BLE001
                 log.warning("poll failed: %s", e)
+                time.sleep(20)
     return {"cycles": n}
 
 

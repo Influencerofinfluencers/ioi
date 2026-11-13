@@ -56,7 +56,8 @@ def whop_members() -> dict[str, dict]:
 # ---------- Telegram bot API ----------
 
 def tg(method: str, **params) -> dict:
-    r = httpx.post(f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/{method}", json=params, timeout=40)
+    r = httpx.post(f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/{method}", json=params,
+                   timeout=40 + int(params.get("timeout", 0) or 0))
     data = r.json()
     if not data.get("ok"):
         raise RuntimeError(f"telegram {method}: {data.get('description')}")
@@ -90,9 +91,9 @@ HELP = ("👋 This is the IOI bot.\n\n<b>IOI Pro member?</b> Send me the e-mail 
         "Not a member yet? {checkout}")
 
 
-def handle_messages(members: dict | None) -> tuple[int, dict | None]:
+def handle_messages(members: dict | None, wait: int = 0) -> tuple[int, dict | None]:
     offset = int(_kv("tg_offset") or 0)
-    updates = tg("getUpdates", offset=offset, timeout=0, allowed_updates=["message", "callback_query"])
+    updates = tg("getUpdates", offset=offset, timeout=wait, allowed_updates=["message", "callback_query"])
     invited = 0
     checkout = config.PRO_CHECKOUT_URL or config.SITE_URL + "/#pricing"
     for u in updates:
@@ -165,7 +166,7 @@ def poll() -> int:
         return 0
     if not enabled():
         return 0
-    return handle_messages(None)[0]
+    return handle_messages(None, wait=25)[0]  # long poll: returns the moment something arrives
 
 
 def sync() -> dict:

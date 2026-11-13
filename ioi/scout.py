@@ -73,12 +73,18 @@ def run_once() -> dict:
         pro._kv(f"reply-{tid}", json.dumps({"text": replies[i], "url": p["url"], "state": "new", "at": db.iso(db.now())}))
         msg = (f'\U0001F4AC <b>Reply {sent + 1}</b> · {html.escape(p["name"])} · {html.escape(p["topic"])} · {p["likes"]} likes\n'
                f'{p["url"]}\n\n<code>{html.escape(replies[i])}</code>\n\n'
-               f'<i>Tik op de tekst om te kopiëren, of laat de bot hem plaatsen.</i>')
+               f'<i>Tik op de knop: X opent met je reply al ingevuld, jij tikt op Beantwoorden.</i>')
         if notify.send(config.TELEGRAM_STATUS_CHAT_ID, msg, buttons=[[
-                {"text": "\u2705 Plaats op X", "callback_data": f"rp:{tid}"},
-                {"text": "\u274C Overslaan", "callback_data": f"rs:{tid}"}]]):
+                {"text": "\u21A9\uFE0F Antwoord op X", "url": intent_url(tid, replies[i])}]]):
             sent += 1
     return {"sent": sent} if sent else {"skipped": "no usable replies"}
+
+
+def intent_url(tid: str, text: str) -> str:
+    """X web intent: opens the reply composer under that post with the text filled in (user posts)."""
+    from urllib.parse import quote
+
+    return f"https://x.com/intent/post?in_reply_to={tid}&text={quote(text)}"
 
 
 def tweet_id(url: str) -> str | None:
@@ -86,7 +92,30 @@ def tweet_id(url: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _ack(cq: dict, text: str):
+    try:
+        pro.tg("answerCallbackQuery", callback_query_id=cq["id"], text=text[:180])
+    except Exception:  # noqa: BLE001 - a late answer must never stop the handling
+        pass
+
+
 def handle_button(cq: dict) -> str:
+    """Buttons from older suggestion messages: the X API refuses unsolicited replies (403),
+    so these now only explain the new 'Antwoord op X' button."""
+    chat = str(((cq.get("message") or {}).get("chat") or {}).get("id", ""))
+    if chat != str(config.TELEGRAM_STATUS_CHAT_ID):
+        _ack(cq, "Not allowed")
+        return "ignored"
+    _ack(cq, "Oude knop - nieuwe voorstellen hebben een 'Antwoord op X'-knop")
+    try:
+        pro.tg("editMessageReplyMarkup", chat_id=chat, message_id=cq["message"]["message_id"],
+               reply_markup={"inline_keyboard": []})
+    except Exception:  # noqa: BLE001
+        pass
+    return "legacy"
+
+
+def _old_handle_button(cq: dict) -> str:  # kept for reference, not used
     """Owner tapped a button under a suggestion. Only the owner's status chat counts."""
     chat = str(((cq.get("message") or {}).get("chat") or {}).get("id", ""))
     if chat != str(config.TELEGRAM_STATUS_CHAT_ID):

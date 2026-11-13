@@ -390,16 +390,20 @@ def test_cards_upload_top50_and_scout(env, monkeypatch, tmp_path):
     assert out == {"sent": 1}
     _, msg, buttons = status_msgs[-1]
     assert "x.com/" in msg and "Eric Balchunas" in msg and "https://x.co" not in msg.split("<code>")[1]
-    tid = buttons[0][0]["callback_data"].split(":")[1]
-    assert buttons[0][0]["callback_data"].startswith("rp:") and tid.isdigit()
+    assert buttons[0][0]["url"].startswith("https://x.com/intent/post?in_reply_to=")
+    tid = buttons[0][0]["url"].split("in_reply_to=")[1].split("&")[0]
+    assert tid.isdigit() and "text=" in buttons[0][0]["url"]
 
-    # owner taps "Plaats op X" -> reply posted once; a stranger's tap is ignored
-    tg_calls = []
+    # old callback buttons are acknowledged (never raise on a late answer) and post nothing
     from ioi import pro
-    monkeypatch.setattr(pro, "tg", lambda method, **p: tg_calls.append(method) or True)
+
+    def late(method, **p):
+        if method == "answerCallbackQuery":
+            raise RuntimeError("query is too old")
+        return True
+
+    monkeypatch.setattr(pro, "tg", late)
     cq = {"id": "c1", "data": f"rp:{tid}", "message": {"message_id": 5, "chat": {"id": 9}}}
+    assert scout.handle_button(cq) == "legacy"
     assert scout.handle_button({**cq, "message": {"message_id": 5, "chat": {"id": 1234}}}) == "ignored"
-    assert scout.handle_button(cq) == "posted"
-    assert "Geplaatst" in status_msgs[-1][1] and "x.com/i/status/77" in status_msgs[-1][1]
-    assert scout.handle_button(cq) == "done-before"  # double tap never posts twice
-    assert sum(1 for u, j, _ in seen if u.endswith("/tweets") and "reply" in (j or {})) == 1
+    assert not any(u.endswith("/tweets") and "reply" in (j or {}) for u, j, _ in seen)
