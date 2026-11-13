@@ -84,8 +84,8 @@ def main(argv=None):
 
         telegram.login()
         return 0
-    db.init_db()  # cheap, idempotent: also re-syncs accounts.csv
     try:
+        db.init_db()  # cheap, idempotent: also re-syncs accounts.csv
         if c == "init-db":
             _print({"ok": True, "accounts": db.rows("SELECT COUNT(*) AS n FROM accounts")[0]["n"]})
         elif c == "verify":
@@ -135,7 +135,10 @@ def main(argv=None):
             p.print_help()
             return 2
     except Exception as e:  # noqa: BLE001 - always tell the owner on Telegram
-        notify.status(f"IOI {c} FAILED: {e}\n{traceback.format_exc()[-1500:]}")
+        hint = ""
+        if "password authentication failed" in str(e):
+            hint = "\nHINT: DATABASE_URL has a wrong password (check [YOUR-PASSWORD] was replaced, no brackets)."
+        notify.status(f"IOI {c} FAILED: {str(e)[:500]}{hint}\n{traceback.format_exc()[-1000:]}")
         raise
     return 0
 
