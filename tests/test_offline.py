@@ -435,7 +435,7 @@ def test_newswire(env, monkeypatch):
     monkeypatch.setattr(news, "_cryptopanic", lambda src: None)
     news.FETCH.update({"x": news._social, "telegram": news._social, "cryptopanic": news._cryptopanic})
     f = news.fetch_all()
-    assert f["new"] >= 2 and any("upbit" in e for e in f["errors"])
+    assert f["new"] >= 2 and not any("upbit" in e for e in f["errors"])
     assert not db.rows("SELECT 1 AS x FROM news WHERE title = 'Old story'")  # no backlog
     titles = [r["title"] for r in db.rows("SELECT title FROM news")]
     assert "Binance Will List Foo (FOO)" in titles
@@ -457,3 +457,15 @@ def test_newswire(env, monkeypatch):
     d = news.for_digest()
     etf = [x for x in d if x["topic"] == "ETF"][0]
     assert etf["voices"] == 5 and etf["voices_minutes_ahead"] > 0  # the voices were ahead of the SEC
+
+
+def test_news_label_accepts_wrapped_json(env, monkeypatch):
+    from ioi import llm, news
+
+    db = env
+    db.run("""INSERT INTO news (id, source, name, kind, title, url, published_at, fetched_at, labeled)
+              VALUES ('a', 's', 'S', 'media', 'Big headline', 'u', :t, :t, 0)""", t=db.iso(db.now()))
+    monkeypatch.setattr(llm, "complete", lambda *a, **k: '{"items": [{"i": 0, "topics": ["btc"], "impact": 7, "teaser": "Hook. Fact."}]}')
+    assert news.label_pending()["labeled"] == 1
+    r = db.rows("SELECT topics, impact, teaser FROM news WHERE id = 'a'")[0]
+    assert r["topics"] == '["BTC"]' and r["impact"] == 7 and r["teaser"] == "Hook. Fact."

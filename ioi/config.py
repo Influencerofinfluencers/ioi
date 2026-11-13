@@ -98,7 +98,8 @@ WHOP_PRODUCT_ID = env("WHOP_PRODUCT_ID")
 
 # --- newswire (fast primary sources) ---
 NEWS_ENABLED = env("NEWS_ENABLED", "1") not in ("0", "false", "no")
-CRYPTOPANIC_TOKEN = env("CRYPTOPANIC_TOKEN")  # optional free token from cryptopanic.com/developers/api
+CRYPTOPANIC_TOKEN = env("CRYPTOPANIC_TOKEN")
+SEC_CONTACT_EMAIL = env("SEC_CONTACT_EMAIL")  # SEC EDGAR requires a contact e-mail in the User-Agent  # optional free token from cryptopanic.com/developers/api
 
 # --- automatic social posts (highlights) ---
 SOCIAL_ENABLED = env("SOCIAL_ENABLED", "1") not in ("0", "false", "no", "")

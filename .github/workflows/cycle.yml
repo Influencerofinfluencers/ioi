@@ -58,6 +58,8 @@ jobs:
       TELEGRAM_PUBLIC_CHAT_ID: ${{ secrets.TELEGRAM_PUBLIC_CHAT_ID }}
       SITE_URL: ${{ vars.SITE_URL }}
       WHOP_API_KEY: ${{ secrets.WHOP_API_KEY }}
+      SEC_CONTACT_EMAIL: ${{ vars.SEC_CONTACT_EMAIL }}
+      CRYPTOPANIC_TOKEN: ${{ secrets.CRYPTOPANIC_TOKEN }}
       WHOP_COMPANY_ID: ${{ vars.WHOP_COMPANY_ID || 'biz_GUESEKFlsYSx61' }}
       WHOP_PRODUCT_ID: ${{ vars.WHOP_PRODUCT_ID || 'prod_o2ZmqDV2AoSr0' }}
       PRO_CHECKOUT_URL: ${{ vars.PRO_CHECKOUT_URL }}

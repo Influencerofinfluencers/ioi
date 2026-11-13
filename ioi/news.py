@@ -28,16 +28,16 @@ CRYPTO = re.compile(r"\b(crypto|bitcoin|btc|ether(eum)?|eth|solana|sol|xrp|stabl
 SOURCES = [
     # exchange listings (official endpoints)
     {"key": "binance_listings", "name": "Binance listings", "kind": "listing", "type": "binance"},
-    {"key": "upbit_notices", "name": "Upbit notices", "kind": "listing", "type": "upbit"},
+    # Upbit blocks cloud IPs (403) - not bypassed; its listings arrive via BWEnews / Tree News
     {"key": "coinbase_assets", "name": "Coinbase Assets", "kind": "listing", "type": "x", "handle": "CoinbaseAssets"},
     {"key": "kraken_blog", "name": "Kraken", "kind": "listing", "type": "rss", "url": "https://blog.kraken.com/feed"},
     # regulators + filings (public sector)
     {"key": "sec_press", "name": "SEC", "kind": "regulator", "type": "rss", "url": "https://www.sec.gov/news/pressreleases.rss"},
     {"key": "cftc_press", "name": "CFTC", "kind": "regulator", "type": "rss", "url": "https://www.cftc.gov/RSS/RSSGP/rssgp.xml", "filter": True},
     {"key": "fed_press", "name": "Federal Reserve", "kind": "regulator", "type": "rss", "url": "https://www.federalreserve.gov/feeds/press_all.xml"},
-    {"key": "sec_s1", "name": "SEC EDGAR S-1", "kind": "filing", "type": "rss", "filter": True,
+    {"key": "sec_s1", "name": "SEC EDGAR S-1", "kind": "filing", "type": "edgar", "filter": True,
      "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=S-1&company=&dateb=&owner=include&count=40&output=atom"},
-    {"key": "sec_19b4", "name": "SEC EDGAR 19b-4", "kind": "filing", "type": "rss", "filter": True,
+    {"key": "sec_19b4", "name": "SEC EDGAR 19b-4", "kind": "filing", "type": "edgar", "filter": True,
      "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=19b-4&company=&dateb=&owner=include&count=40&output=atom"},
     # hack / exploit alerts
     {"key": "peckshield", "name": "PeckShieldAlert", "kind": "hack", "type": "x", "handle": "PeckShieldAlert"},
@@ -84,9 +84,12 @@ def _ts(value) -> str:
 # ---------- fetchers: each returns [{"title", "url", "at"}] ----------
 
 def _rss(src):
-    r = httpx.get(src["url"], headers=UA, timeout=30, follow_redirects=True)
-    r.raise_for_status()
-    feed = feedparser.parse(r.content)
+    body = src.get("_body")
+    if body is None:
+        r = httpx.get(src["url"], headers=UA, timeout=30, follow_redirects=True)
+        r.raise_for_status()
+        body = r.content
+    feed = feedparser.parse(body)
     out = []
     for e in feed.entries[:30]:
         title = (e.get("title") or "").strip()
@@ -99,12 +102,25 @@ def _rss(src):
     return out
 
 
+def _edgar(src):
+    """SEC fair-access policy: requests must carry a contact e-mail in the User-Agent.
+    Only active when the owner set SEC_CONTACT_EMAIL."""
+    if not config.SEC_CONTACT_EMAIL:
+        return None
+    r = httpx.get(src["url"], headers={"User-Agent": f"IOI Influencer of Influencers {config.SEC_CONTACT_EMAIL}"},
+                  timeout=30, follow_redirects=True)
+    r.raise_for_status()
+    return _rss({**src, "_body": r.content})
+
+
 def _binance(src):
     r = httpx.get("https://www.binance.com/bapi/composite/v1/public/cms/article/list/query",
                   params={"type": 1, "catalogId": 48, "pageNo": 1, "pageSize": 15}, headers=UA, timeout=30)
     r.raise_for_status()
     cats = (r.json().get("data") or {}).get("catalogs") or []
     arts = cats[0].get("articles", []) if cats else []
+    if not cats:
+        raise ValueError("unexpected Binance response: " + r.text[:120])
     return [{"title": a["title"], "url": f"https://www.binance.com/en/support/announcement/{a['code']}",
              "at": _ts(a.get("releaseDate") or 0)} for a in arts if a.get("title")]
 
@@ -152,7 +168,7 @@ def _social(src):
              "x_read": src["type"] == "x"} for p in posts if p.get("text")]
 
 
-FETCH = {"rss": _rss, "binance": _binance, "upbit": _upbit, "cryptopanic": _cryptopanic, "x": _social, "telegram": _social}
+FETCH = {"rss": _rss, "edgar": _edgar, "binance": _binance, "upbit": _upbit, "cryptopanic": _cryptopanic, "x": _social, "telegram": _social}
 
 
 def fetch_all() -> dict:
@@ -212,8 +228,13 @@ def label_pending(limit: int = 30) -> dict:
                        "Headlines:\n" + lines, config.LABEL_MODEL, max_tokens=4000, provider=config.LABEL_PROVIDER)
     from .social import ADVICE
 
+    parsed = llm.parse_json(out) or []
+    if isinstance(parsed, dict):  # {"items": [...]} or similar wrapper
+        parsed = next((v for v in parsed.values() if isinstance(v, list)), [parsed])
     done = 0
-    for res in llm.parse_json(out) or []:
+    for res in parsed:
+        if not isinstance(res, dict):
+            continue
         try:
             it = items[int(res["i"])]
         except (KeyError, ValueError, IndexError, TypeError):
