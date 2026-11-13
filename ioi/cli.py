@@ -61,8 +61,7 @@ def cmd_cycle(args):
         notify.status(f"IOI Pro sync failed: {str(e)[:300]}")
     stats = {"fetch": f, "label": lab, "alerts": [a["topic"] for a in alerts], "teasers": teased, "pro": pro_stats, "news": news_stats}
     db.log_run("cycle", started, stats)
-    if f["errors"]:
-        notify.status("IOI: fetch errors\n" + "\n".join(f["errors"][:10]))
+    _report_fetch_errors(f["errors"])
     if f.get("x_budget_hit"):
         notify.status("IOI: X daily read budget reached - X paused until tomorrow (X_MAX_READS_PER_DAY)")
     return stats
@@ -164,6 +163,26 @@ def _loop_alert(kind: str, text: str, every_min: int = 60):
     if time.time() - _LAST_ALERT.get(key, 0) >= every_min * 60:
         _LAST_ALERT[key] = time.time()
         notify.status(text)
+
+
+def _report_fetch_errors(errors: list[str], after: int = 3, repeat: int = 36):
+    """Only report an account once it failed `after` cycles in a row (≈30 min), then every
+    `repeat` cycles (≈6 h). One-off hiccups (YouTube, X timeouts) stay silent."""
+    from . import pro
+
+    try:
+        counts = json.loads(pro._kv("fetch_fail_counts") or "{}")
+    except ValueError:
+        counts = {}
+    now = {}
+    for e in errors:
+        key = e.split(":", 1)[0].strip()
+        now[key] = counts.get(key, 0) + 1
+    pro._kv("fetch_fail_counts", json.dumps(now))
+    due = [e for e in errors if now[e.split(":", 1)[0].strip()] in (after,)
+           or (now[e.split(":", 1)[0].strip()] - after) % repeat == 0 and now[e.split(":", 1)[0].strip()] > after]
+    if due:
+        notify.status(f"IOI: fetch errors (failing {after}+ cycles in a row)\n" + "\n".join(e[:160] for e in due[:10]))
 
 
 def cmd_loop(args):

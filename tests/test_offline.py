@@ -481,3 +481,18 @@ def test_reset_engine_disposes(env):
     e.dispose = lambda *a, **k: (disposed.append(1), orig(*a, **k))
     db.reset_engine()
     assert disposed and db._engine is None
+
+
+def test_fetch_errors_reported_only_when_persistent(env, monkeypatch):
+    from ioi import cli, notify
+
+    sent = []
+    monkeypatch.setattr(notify, "status", lambda t: sent.append(t))
+    cli._report_fetch_errors(["yt1: 500"])
+    cli._report_fetch_errors(["yt1: 500", "yt2: 404"])
+    assert sent == []
+    cli._report_fetch_errors(["yt1: 500"])
+    assert len(sent) == 1 and "yt1" in sent[0]
+    cli._report_fetch_errors([])  # recovered: counter resets
+    cli._report_fetch_errors(["yt1: 500"])
+    assert len(sent) == 1

@@ -43,7 +43,15 @@ def resolve(account: dict) -> dict:
 def fetch(account: dict) -> list[dict]:
     if not account.get("platform_user_id"):
         account.update(resolve(account))
-    r = httpx.get(FEED.format(cid=account["platform_user_id"]), timeout=30)
+    # YouTube's RSS endpoint sporadically answers 404/500 to cloud IPs: retry a few times
+    import time
+
+    for attempt in range(3):
+        r = httpx.get(FEED.format(cid=account["platform_user_id"]), timeout=30,
+                      headers={"User-Agent": "Mozilla/5.0 (compatible; IOI/1.0)"})
+        if r.status_code < 400 or attempt == 2:
+            break
+        time.sleep(2 + attempt * 3)
     r.raise_for_status()
     feed = feedparser.parse(r.text)
     last = account.get("last_seen_id") or ""
