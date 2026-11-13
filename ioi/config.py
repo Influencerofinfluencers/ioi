@@ -67,8 +67,8 @@ WRITE_MODEL = env("WRITE_MODEL", "claude-sonnet-5-5")  # digests and reports
 OPENAI_BASE_URL = env("OPENAI_BASE_URL") or "https://openrouter.ai/api/v1"
 OPENAI_API_KEY = env("OPENAI_API_KEY")
 # open-source backups, tried in order when the primary model fails (needs OPENAI_API_KEY, e.g. OpenRouter)
-_FALLBACK_DEFAULT = ("meta-llama/llama-3.3-70b-instruct:free,deepseek/deepseek-chat:free,qwen/qwen-2.5-72b-instruct:free,"
-                     "meta-llama/llama-3.3-70b-instruct,deepseek/deepseek-chat")  # free first, paid only with credit
+_FALLBACK_DEFAULT = ("nvidia/nemotron-3-ultra-550b-a55b:free,google/gemma-4-31b-it:free,nvidia/nemotron-3.5-super-vl:free,"
+                     "meta-llama/llama-3.3-70b-instruct,deepseek/deepseek-chat")  # free open-source first, then paid (key capped at $5)
 LLM_FALLBACK_MODELS = [m.strip() for m in (env("LLM_FALLBACK_MODELS") or _FALLBACK_DEFAULT).split(",") if m.strip()]
 DIGEST_LANGUAGE = env("DIGEST_LANGUAGE", PROFILE.get("language", "English"))
 
