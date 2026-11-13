@@ -1,0 +1,12 @@
+{
+  "key": "VUL-IN (korte naam, bv. cbd)",
+  "brand": "Naam van de feed/nieuwsbrief",
+  "audience": "voor wie het is, bv. 'Dutch CBD shop owners and customers'",
+  "accounts_csv": "config/accounts-VUL-IN.csv",
+  "language": "Dutch",
+  "categories": ["product_launch", "regulation", "research", "trend", "deal_promo", "opinion", "promo_spam", "other"],
+  "topic_rules": "Brands and products as short UPPER_SNAKE names. Merge synonyms.",
+  "voice": "a friendly expert writing for busy readers. Plain language, no hype.",
+  "rules": "Never make medical or health claims. Never recommend a purchase. Describe what influential accounts say.",
+  "disclaimer": "Summary of public posts by influential accounts. Not advice."
+}

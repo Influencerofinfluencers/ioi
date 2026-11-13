@@ -1,0 +1,12 @@
+{
+  "key": "crypto",
+  "brand": "IOI - Influencer of Influencers",
+  "audience": "crypto readers and traders",
+  "accounts_csv": "config/accounts.csv",
+  "language": "English",
+  "categories": ["price_action", "regulation", "etf_institutional", "security_hack", "onchain_flow", "listing_exchange", "launch_product", "macro", "opinion", "promo_spam", "other"],
+  "topic_rules": "Coins/tokens as uppercase tickers without $ (BTC, ETH, SOL). Other topics as short UPPER_SNAKE names (ETF, SEC, STABLECOINS, AIRDROP, HACK, FED_RATES, MICA). Merge synonyms (bitcoin -> BTC, ether -> ETH).",
+  "voice": "a smart friend explaining crypto in plain, lively language. No hype, no shilling.",
+  "rules": "Never tell readers to buy or sell. Describe attention and sentiment, not advice.",
+  "disclaimer": "Attention data, not financial advice. IOI summarises what influential accounts say; it does not recommend buying or selling anything. Always do your own research."
+}

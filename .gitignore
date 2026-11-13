@@ -1,0 +1,6 @@
+.env
+*.db
+public/
+__pycache__/
+.pytest_cache/
+*.session

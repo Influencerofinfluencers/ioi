@@ -1,0 +1,51 @@
+key,name,category,platform,handle,active
+vitalik,Vitalik Buterin,founder,x,VitalikButerin,1
+cz,Changpeng Zhao,founder,x,cz_binance,1
+saylor,Michael Saylor,bitcoin,x,saylor,1
+armstrong,Brian Armstrong,founder,x,brian_armstrong,1
+toly,Anatoly Yakovenko,founder,x,aeyakovenko,1
+ardoino,Paolo Ardoino,founder,x,paoloardoino,1
+hayes,Arthur Hayes,macro,x,CryptoHayes,1
+raoul,Raoul Pal,macro,x,RaoulGMI,1
+pomp,Anthony Pompliano,media,x,APompliano,1
+balchunas,Eric Balchunas,etf,x,EricBalchunas,1
+seyffart,James Seyffart,etf,x,JSeyff,1
+wu,Wu Blockchain,news,x,WuBlockchain,1
+tier10k,DB (tier10k),news,x,tier10k,1
+cointelegraph,Cointelegraph,news,x,Cointelegraph,1
+coindesk,CoinDesk,news,x,CoinDesk,1
+theblock,The Block,news,x,TheBlock__,1
+btcmag,Bitcoin Magazine,news,x,BitcoinMagazine,1
+documentingbtc,Documenting Bitcoin,news,x,DocumentingBTC,1
+milkroad,Milk Road,news,x,MilkRoadDaily,1
+lookonchain,Lookonchain,onchain,x,lookonchain,1
+zachxbt,ZachXBT,onchain,x,zachxbt,1
+kiyoung,Ki Young Ju,onchain,x,ki_young_ju,1
+glassnode,Glassnode,onchain,x,glassnode,1
+santiment,Santiment,onchain,x,santimentfeed,1
+woo,Willy Woo,onchain,x,woonomic,1
+defillama,DefiLlama,onchain,x,DefiLlama,1
+mmcrypto,MMCrypto,trader,x,MMCrypto,1
+pentoshi,Pentoshi,trader,x,Pentosh1,1
+kaleo,Kaleo,trader,x,CryptoKaleo,1
+cobie,Cobie,trader,x,cobie,1
+sherpa,Altcoin Sherpa,trader,x,AltcoinSherpa,1
+melker,Scott Melker,trader,x,scottmelker,1
+ash,Ash Crypto,trader,x,Ashcryptoreal,1
+lark,Lark Davis,educator,x,TheCryptoLark,1
+coinbureau,Coin Bureau,educator,youtube,@CoinBureau,1
+altcoindaily,Altcoin Daily,news,youtube,@AltcoinDaily,1
+cowen,Benjamin Cowen,macro,youtube,@intothecryptoverse,1
+banter,Crypto Banter,media,youtube,@CryptoBanter,1
+cryptosrus,CryptosRUs,trader,youtube,@CryptosRUs,1
+bankless,Bankless,media,youtube,@Bankless,1
+realvision,Real Vision,macro,youtube,@RealVisionFinance,1
+colin,Colin Talks Crypto,educator,youtube,@ColinTalksCrypto,1
+brianjung,Brian Jung,educator,youtube,@BrianJung,1
+casey,Crypto Casey,educator,youtube,@CryptoCasey,1
+whalealert,Whale Alert,onchain,telegram,whale_alert_io,1
+unfolded,Unfolded,news,telegram,unfolded,1
+ct_telegram,Cointelegraph (Telegram),news,telegram,cointelegraph,1
+binance_ann,Binance Announcements,exchange,telegram,binance_announcements,1
+decrypt,Decrypt,news,instagram,decryptmedia,1
+cmc,CoinMarketCap,data,instagram,coinmarketcap,1

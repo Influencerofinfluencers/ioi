@@ -1,0 +1,46 @@
+name: cycle (fetch + label + alerts)
+
+on:
+  schedule:
+    # Public repository = unlimited free Actions minutes, so every 10 minutes.
+    # (A private repo on the free plan should use "7,37 * * * *": every 30 minutes.)
+    - cron: "3,13,23,33,43,53 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: ioi-cycle
+  cancel-in-progress: false
+
+jobs:
+  cycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NICHE: ${{ vars.NICHE || 'crypto' }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
+      X_MAX_RESULTS: ${{ vars.X_MAX_RESULTS || '20' }}
+      X_MAX_READS_PER_DAY: ${{ vars.X_MAX_READS_PER_DAY || '1000' }}
+      YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+      TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+      TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+      TELEGRAM_SESSION: ${{ secrets.TELEGRAM_SESSION }}
+      IG_USER_ID: ${{ secrets.IG_USER_ID }}
+      IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+      LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'anthropic' }}
+      LABEL_PROVIDER: ${{ vars.LABEL_PROVIDER || vars.LLM_PROVIDER || 'anthropic' }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+      LABEL_MODEL: ${{ vars.LABEL_MODEL || 'claude-haiku-5-5' }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_STATUS_CHAT_ID: ${{ secrets.TELEGRAM_STATUS_CHAT_ID }}
+      TELEGRAM_PRO_CHAT_ID: ${{ secrets.TELEGRAM_PRO_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m ioi.cli cycle
