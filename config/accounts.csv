@@ -47,5 +47,5 @@ whalealert,Whale Alert,onchain,telegram,whale_alert_io,1
 unfolded,Unfolded,news,telegram,unfolded,1
 ct_telegram,Cointelegraph (Telegram),news,telegram,cointelegraph,1
 binance_ann,Binance Announcements,exchange,telegram,binance_announcements,1
-decrypt,Decrypt,news,instagram,decryptmedia,1
-cmc,CoinMarketCap,data,instagram,coinmarketcap,1
+treenews,Tree News,news,telegram,TreeNewsFeed,1
+bybit_ann,Bybit Announcements,exchange,telegram,Bybit_Announcements,1
