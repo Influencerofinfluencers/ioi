@@ -245,7 +245,7 @@ def main(argv=None):
             chain = [(config.WRITE_PROVIDER, config.WRITE_MODEL)] + [("openai", m) for m in config.LLM_FALLBACK_MODELS]
             for prov, mdl in chain:
                 try:
-                    out = llm._one("Reply with the single word OK.", "ping", mdl, 10, prov)
+                    out = llm._one("Reply with the single word OK.", "ping", mdl, 400, prov)
                     res[mdl] = "ok" if out and out.strip() else "empty"
                 except Exception as e:  # noqa: BLE001
                     res[mdl] = "fail: " + str(e)[:120]
