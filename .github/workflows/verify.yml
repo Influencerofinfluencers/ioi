@@ -23,6 +23,10 @@ jobs:
       IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_STATUS_CHAT_ID: ${{ secrets.TELEGRAM_STATUS_CHAT_ID }}
+      TELEGRAM_PRO_CHAT_ID: ${{ secrets.TELEGRAM_PRO_CHAT_ID }}
+      WHOP_API_KEY: ${{ secrets.WHOP_API_KEY }}
+      WHOP_COMPANY_ID: ${{ vars.WHOP_COMPANY_ID || 'biz_GUESEKFlsYSx61' }}
+      WHOP_PRODUCT_ID: ${{ vars.WHOP_PRODUCT_ID || 'prod_o2ZmqDV2AoSr0' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -32,3 +36,5 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m pytest -q tests
       - run: python -m ioi.cli verify
+      - run: python -m ioi.cli pro-check
+        continue-on-error: true

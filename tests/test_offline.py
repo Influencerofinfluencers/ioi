@@ -250,3 +250,54 @@ def test_landing_teasers_and_social(env, monkeypatch):
     db.run("DELETE FROM social_posts")
     with pytest.raises(ValueError):
         social.run_once()
+
+
+def test_pro_access_flow(env, monkeypatch):
+    from ioi import config, pro
+
+    db = env
+    for k, v in {"WHOP_API_KEY": "k", "WHOP_COMPANY_ID": "biz_1", "WHOP_PRODUCT_ID": "prod_1",
+                 "TELEGRAM_BOT_TOKEN": "t", "TELEGRAM_PRO_CHAT_ID": "-100pro"}.items():
+        monkeypatch.setattr(config, k, v)
+    monkeypatch.setattr(pro.notify, "status", lambda *a, **k: True)
+    whop = {"mem_a": "trialing", "mem_other": "active"}
+    updates = [
+        {"update_id": 1, "message": {"chat": {"type": "private"}, "from": {"id": 11}, "text": "hi"}},
+        {"update_id": 2, "message": {"chat": {"type": "private"}, "from": {"id": 11}, "text": "My mail: Ann@Example.com"}},
+        {"update_id": 3, "message": {"chat": {"type": "private"}, "from": {"id": 22}, "text": "ann@example.com"}},
+        {"update_id": 4, "message": {"chat": {"type": "private"}, "from": {"id": 33}, "text": "nobody@x.io"}},
+    ]
+    calls = []
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        assert headers["Authorization"] == "Bearer k" and params["company_id"] == "biz_1"
+        data = [{"id": mid, "status": st, "product": {"id": "prod_1" if mid == "mem_a" else "prod_2"},
+                 "user": {"id": "u", "email": "ann@example.com"}} for mid, st in whop.items()]
+        return httpx.Response(200, json={"data": data, "page_info": {"has_next_page": False}}, request=httpx.Request("GET", url))
+
+    def fake_post(url, json=None, timeout=None):
+        method = url.rsplit("/", 1)[-1]
+        calls.append((method, json))
+        res = {"getUpdates": [u for u in updates if u["update_id"] >= (json or {}).get("offset", 0)],
+               "createChatInviteLink": {"invite_link": "https://t.me/+abc"}}.get(method, True)
+        return httpx.Response(200, json={"ok": True, "result": res}, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(pro.httpx, "get", fake_get)
+    monkeypatch.setattr(pro.httpx, "post", fake_post)
+
+    assert pro.sync() == {"invited": 1, "removed": 0}
+    dms = [(c[1]["chat_id"], c[1]["text"]) for c in calls if c[0] == "sendMessage"]
+    assert "Whop" in dms[0][1]                                   # help text
+    assert dms[1][0] == 11 and "t.me/+abc" in dms[1][1]          # invited
+    assert dms[2][0] == 22 and "already linked" in dms[2][1]     # same membership, other account
+    assert dms[3][0] == 33 and "couldn't find" in dms[3][1]
+    link = [c[1] for c in calls if c[0] == "createChatInviteLink"][0]
+    assert link["member_limit"] == 1 and link["chat_id"] == "-100pro"
+    assert pro._kv("tg_offset") == "5"
+
+    whop["mem_a"] = "canceled"
+    calls.clear()
+    assert pro.sync()["removed"] == 1
+    assert [c[0] for c in calls][:3] == ["getUpdates", "banChatMember", "unbanChatMember"]
+    calls.clear()
+    assert pro.sync()["removed"] == 0  # removed only once

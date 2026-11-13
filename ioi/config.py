@@ -85,6 +85,13 @@ BLUESKY_PROFILE_URL = env("BLUESKY_PROFILE_URL")
 TEASER_DELAY_HOURS = env_int("TEASER_DELAY_HOURS", 3)  # free channel sees Pro alerts this much later
 TEASERS_PER_DAY = env_int("TEASERS_PER_DAY", 3)
 
+# --- Whop (IOI Pro access) - the key is read-only: members + member e-mails ---
+WHOP_API_KEY = env("WHOP_API_KEY")
+WHOP_API_BASE = env("WHOP_API_BASE", "https://api.whop.com/api/v1")
+WHOP_API_VERSION = env("WHOP_API_VERSION", "2026-11-12")
+WHOP_COMPANY_ID = env("WHOP_COMPANY_ID")
+WHOP_PRODUCT_ID = env("WHOP_PRODUCT_ID")
+
 # --- automatic social posts (highlights) ---
 SOCIAL_ENABLED = env("SOCIAL_ENABLED", "1") not in ("0", "false", "no", "")
 SOCIAL_MAX_PER_DAY = env_int("SOCIAL_MAX_PER_DAY", 3)

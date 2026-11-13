@@ -38,6 +38,9 @@ jobs:
       TELEGRAM_PRO_CHAT_ID: ${{ secrets.TELEGRAM_PRO_CHAT_ID }}
       TELEGRAM_PUBLIC_CHAT_ID: ${{ secrets.TELEGRAM_PUBLIC_CHAT_ID }}
       SITE_URL: ${{ vars.SITE_URL }}
+      WHOP_API_KEY: ${{ secrets.WHOP_API_KEY }}
+      WHOP_COMPANY_ID: ${{ vars.WHOP_COMPANY_ID || 'biz_GUESEKFlsYSx61' }}
+      WHOP_PRODUCT_ID: ${{ vars.WHOP_PRODUCT_ID || 'prod_o2ZmqDV2AoSr0' }}
       PRO_CHECKOUT_URL: ${{ vars.PRO_CHECKOUT_URL }}
       PRO_PRICE: ${{ vars.PRO_PRICE || '€25' }}
       FREE_CHANNEL_URL: ${{ vars.FREE_CHANNEL_URL }}

@@ -48,6 +48,10 @@ SCHEMA = [
     """CREATE TABLE IF NOT EXISTS social_posts (
         id TEXT PRIMARY KEY, created_at TEXT, topic TEXT, text TEXT, results TEXT
     )""",
+    """CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)""",
+    """CREATE TABLE IF NOT EXISTS pro_members (
+        membership_id TEXT PRIMARY KEY, email TEXT, tg_user_id TEXT, status TEXT, invited_at TEXT
+    )""",
     "CREATE INDEX IF NOT EXISTS posts_created ON posts (created_at)",
     "CREATE INDEX IF NOT EXISTS posts_labeled ON posts (labeled)",
 ]
