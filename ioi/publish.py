@@ -21,6 +21,7 @@ def _page(title: str, body: str) -> str:
     return f"""<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{html.escape(title)}</title>
+<meta name="description" content="{html.escape(title)} - IOI tracks what crypto's 50 most influential voices say, and who said it first.">
 <link rel="icon" href="{config.SITE_URL}/assets/IOI-favicon.ico">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
 <link rel="alternate" type="application/rss+xml" title="{html.escape(config.BRAND)}" href="{config.SITE_URL}/feed.xml">
@@ -49,6 +50,60 @@ def _cta() -> str:
     if config.FREE_CHANNEL_URL:
         return f'<p class="cta"><strong>Get this every morning:</strong> <a href="{config.FREE_CHANNEL_URL}">join the free Telegram channel</a>.</p>'
     return ""
+
+
+PROFILE_URL = {"x": "https://x.com/{h}", "youtube": "https://www.youtube.com/{h}", "telegram": "https://t.me/{h}",
+               "bluesky": "https://bsky.app/profile/{h}"}
+
+
+PLATFORM_NAME = {"x": "X", "youtube": "YouTube", "telegram": "Telegram", "bluesky": "Bluesky"}
+
+
+def account_pages(board: list[dict]) -> list[str]:
+    """One shareable page per tracked account: rank, first moves, latest topics they led.
+    Good for Google ("<name> crypto influence") and for the accounts themselves to share."""
+    out = config.PUBLIC_DIR / "a"
+    out.mkdir(parents=True, exist_ok=True)
+    recent = influence.mentions(db.ago(days=7))
+    by_acc: dict = {}
+    for m in recent:
+        by_acc.setdefault(m["account_key"], []).append(m)
+    first_of = {}
+    for t in {m["topic"] for m in recent}:
+        ms = sorted((m for m in recent if m["topic"] == t), key=lambda m: m["created_at"])
+        if len({m["account_key"] for m in ms}) >= 3:
+            first_of.setdefault(ms[0]["account_key"], []).append((t, ms[0]["created_at"], len({m["account_key"] for m in ms})))
+    n = len(board)
+    written = []
+    for r in board:
+        led = sorted(first_of.get(r["key"], []), key=lambda x: -x[2])[:8]
+        led_html = "".join(f"<li><b>{html.escape(t)}</b>: first of {k} tracked accounts, {at[:16].replace('T', ' ')} UTC</li>"
+                           for t, at, k in led) or "<li>No first moves this week yet.</li>"
+        topics = sorted({m["topic"] for m in by_acc.get(r["key"], [])})[:15]
+        prof = PROFILE_URL.get(r["platform"], "").format(h=str(r["handle"]).lstrip("@"))
+        title = f"{r['name']}: IOI influence rank #{r['rank']} of {n}"
+        body = (f"<h1>{html.escape(r['name'])}</h1>"
+                f"<p><b>#{r['rank']} of {n}</b> on the IOI Top 50 this week · {r['first_moves']} first moves · "
+                f"{r['echoes']} echoes · score {r['score']}</p>"
+                f"<p class=\"small\">Ranked on who raises topics first and who follows, not on followers. "
+                f"<a href=\"{config.SITE_URL}/leaderboard.html\">Full ranking</a>"
+                + (f" · <a href=\"{html.escape(prof)}\">{html.escape(r['name'])} on {PLATFORM_NAME.get(r['platform'], r['platform'])}</a>" if prof else "")
+                + "</p><h2>Conversations they started this week</h2><ul>" + led_html + "</ul>"
+                + ("<h2>Topics this week</h2><p>" + ", ".join(html.escape(t) for t in topics) + "</p>" if topics else ""))
+        (out / f"{r['key']}.html").write_text(_page(title, body), encoding="utf-8")
+        written.append(f"a/{r['key']}.html")
+    return written
+
+
+def write_sitemap(digests, reports, pages):
+    out = config.PUBLIC_DIR
+    urls = ["", "leaderboard.html", "daily/"] + [f"daily/{d['day']}.html" for d in digests] \
+        + [f"weekly/{r['id']}.html" for r in reports] + pages
+    today = db.iso(db.now())[:10]
+    xml = "".join(f"<url><loc>{html.escape(config.SITE_URL)}/{u}</loc><lastmod>{today}</lastmod></url>" for u in urls)
+    (out / "sitemap.xml").write_text('<?xml version="1.0" encoding="UTF-8"?>'
+                                     f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{xml}</urlset>', encoding="utf-8")
+    (out / "robots.txt").write_text(f"User-agent: *\nAllow: /\nSitemap: {config.SITE_URL}/sitemap.xml\n", encoding="utf-8")
 
 
 def _dt(ts: str) -> datetime:
@@ -94,7 +149,7 @@ def build_site() -> dict:
     board = influence.leaderboard(days=7)
     (out / "leaderboard.json").write_text(json.dumps(board, indent=1), encoding="utf-8")
     trs = "".join(
-        f"<tr><td>{r['rank']}</td><td>{html.escape(r['name'])}</td><td>{r['platform']}</td>"
+        f"<tr><td>{r['rank']}</td><td><a href=\"{config.SITE_URL}/a/{r['key']}.html\">{html.escape(r['name'])}</a></td><td>{r['platform']}</td>"
         f"<td>{r['first_moves']}</td><td>{r['echoes']}</td><td>{r['score']}</td></tr>"
         for r in board
     )
@@ -138,5 +193,7 @@ def build_site() -> dict:
         e.description(html.escape(a["message"]))
         e.pubDate(_dt(a["created_at"]))
     fg.rss_file(str(out / "feed.xml"), pretty=True)
+    pages = account_pages(board)
+    write_sitemap(digests, reports, pages)
     (out / ".nojekyll").write_text("", encoding="utf-8")
     return {"digests": len(digests), "alerts": len(alerts), "weekly": len(reports), "leaderboard": len(board), "dir": str(out)}
