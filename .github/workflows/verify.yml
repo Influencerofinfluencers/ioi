@@ -3,7 +3,12 @@ name: verify accounts
 # Run by hand (Actions tab > verify accounts > Run workflow) after editing config/accounts.csv.
 # Also runs automatically when accounts.csv changes.
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      news_only:
+        description: "only run the newswire check (no scout suggestions, no card tests)"
+        type: boolean
+        default: false
   push:
     paths: ["config/accounts.csv"]
 
@@ -44,14 +49,19 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - run: python -m pytest -q tests
-      - run: python -m ioi.cli verify
-      - run: python -m ioi.cli pro-check
+      - if: ${{ !inputs.news_only }}
+        run: python -m ioi.cli verify
+      - if: ${{ !inputs.news_only }}
+        run: python -m ioi.cli pro-check
         continue-on-error: true
-      - run: python -m ioi.cli llm-check
+      - if: ${{ !inputs.news_only }}
+        run: python -m ioi.cli llm-check
         continue-on-error: true
-      - run: python -m ioi.cli card-test
+      - if: ${{ !inputs.news_only }}
+        run: python -m ioi.cli card-test
         continue-on-error: true
-      - run: python -m ioi.cli scout
+      - if: ${{ !inputs.news_only }}
+        run: python -m ioi.cli scout
         continue-on-error: true
       - run: python -m ioi.cli news-check
         continue-on-error: true
