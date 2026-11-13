@@ -183,3 +183,11 @@ def test_removed_accounts_are_deactivated(env, tmp_path, monkeypatch):
     monkeypatch.setattr(config, "ACCOUNTS_CSV", csv_path)
     db.sync_accounts()
     assert db.rows("SELECT COUNT(*) AS n FROM accounts WHERE active = 1")[0]["n"] == 1
+
+
+def test_parse_json_salvages_truncated_reply():
+    from ioi.llm import parse_json
+
+    reply = '```json\n[\n{"i": 0, "topics": ["BTC"]},\n{"i": 1, "topics": ["ETH"]},\n{"i": 2, "top'
+    out = parse_json(reply)
+    assert [o["i"] for o in out] == [0, 1]

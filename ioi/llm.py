@@ -51,7 +51,8 @@ def _openai(system, user, model, max_tokens):
 
 
 def parse_json(textout: str):
-    """Pull the first JSON array/object out of a model reply (tolerates ``` fences)."""
+    """Pull JSON out of a model reply. Tolerates ``` fences, text around it and a
+    reply that was cut off: complete objects of a truncated array are kept."""
     cleaned = re.sub(r"```(?:json)?", "", textout).strip()
     for opener, closer in (("[", "]"), ("{", "}")):
         start, end = cleaned.find(opener), cleaned.rfind(closer)
@@ -60,4 +61,15 @@ def parse_json(textout: str):
                 return json.loads(cleaned[start : end + 1])
             except json.JSONDecodeError:
                 continue
+    # salvage: decode every complete {...} object one by one
+    dec, items, i = json.JSONDecoder(), [], cleaned.find("{")
+    while i != -1:
+        try:
+            obj, nxt = dec.raw_decode(cleaned, i)
+            items.append(obj)
+            i = cleaned.find("{", nxt)
+        except json.JSONDecodeError:
+            i = cleaned.find("{", i + 1)
+    if items:
+        return items
     raise LLMError(f"model did not return JSON: {textout[:200]}")

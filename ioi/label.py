@@ -10,7 +10,7 @@ from . import config, db, llm
 
 log = logging.getLogger("ioi.label")
 
-BATCH = 25
+BATCH = 12  # small batches: answers stay well under the token limit
 def system_prompt() -> str:
     return f"""You label social-media posts for an attention-analytics product for {config.AUDIENCE}.
 For EACH post return an object with:
@@ -22,7 +22,7 @@ For EACH post return an object with:
 - "format": one of ["news", "analysis", "chart_data", "thread", "question", "meme", "video", "promo", "other"]
 - "hook": the opening technique, one of ["breaking", "number", "question", "bold_claim", "story", "list", "none"]
 - "summary": max 20 words, neutral, in English, your own words (no quotes)
-Return ONLY a JSON array, nothing else."""
+Return ONLY a compact JSON array (one object per post, no markdown, no comments)."""
 
 
 def _prompt(batch: list[dict]) -> str:
@@ -53,7 +53,7 @@ def label_pending(limit: int = 500) -> dict:
         batch = todo[start : start + BATCH]
         try:
             out = llm.parse_json(
-                llm.complete(system_prompt(), _prompt(batch), config.LABEL_MODEL, max_tokens=4000, provider=config.LABEL_PROVIDER)
+                llm.complete(system_prompt(), _prompt(batch), config.LABEL_MODEL, max_tokens=6000, provider=config.LABEL_PROVIDER)
             )
         except Exception as e:  # noqa: BLE001
             log.warning("labelling batch failed: %s", e)
