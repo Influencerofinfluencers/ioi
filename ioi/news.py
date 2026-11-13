@@ -219,10 +219,20 @@ like "moon", no emojis except at most one at the start, never buy/sell advice. {
 Return a JSON list: [{{"i": <index>, "topics": [...], "impact": <int>, "teaser": "<text>"}}]"""
 
 
-def label_pending(limit: int = 30) -> dict:
+def label_pending(limit: int = 30, batch: int = 10) -> dict:
+    total = 0
+    for _ in range(max(1, limit // batch)):
+        n = _label_batch(batch)
+        total += n
+        if n == 0:
+            break
+    return {"labeled": total}
+
+
+def _label_batch(limit: int) -> int:
     items = db.rows("SELECT * FROM news WHERE labeled = 0 ORDER BY published_at DESC LIMIT :n", n=limit)
     if not items:
-        return {"labeled": 0}
+        return 0
     lines = "\n".join(f"{i}. [{it['name']}] {it['title']}" for i, it in enumerate(items))
     out = llm.complete(SYSTEM.format(brand=config.BRAND, topic_rules=config.TOPIC_RULES, rules=config.CONTENT_RULES),
                        "Headlines:\n" + lines, config.LABEL_MODEL, max_tokens=4000, provider=config.LABEL_PROVIDER)
@@ -248,7 +258,7 @@ def label_pending(limit: int = 30) -> dict:
         done += 1
     # anything the model skipped: mark labeled so it never blocks the queue
     db.run("UPDATE news SET labeled = 1 WHERE labeled = 0 AND fetched_at < :t", t=db.ago(hours=2))
-    return {"labeled": done}
+    return done
 
 
 # ---------- analysis ----------

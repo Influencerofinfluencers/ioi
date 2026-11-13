@@ -332,7 +332,10 @@ def main(argv=None):
             report = {s["key"]: per.get(s["key"], 0) for s in news.SOURCES}
             notify.status("IOI newswire check (items per source, 48h):\n" + "\n".join(f"{k}: {v}" for k, v in report.items())
                           + ("\nERRORS:\n" + "\n".join(f["errors"]) if f["errors"] else ""))
-            _print({"per_source": report, "errors": f["errors"], "label": news.label_pending()})
+            lab = news.label_pending(limit=40)
+            samples = db.rows("""SELECT name, impact, title, teaser FROM news WHERE teaser IS NOT NULL AND teaser != ''
+                                 ORDER BY impact DESC, published_at DESC LIMIT 8""")
+            _print({"per_source": report, "errors": f["errors"], "label": lab, "samples": samples})
         elif c == "scout":
             from . import scout
 
