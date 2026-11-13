@@ -153,6 +153,19 @@ def _maybe_marketing():
     return done
 
 
+_LAST_ALERT: dict = {}
+
+
+def _loop_alert(kind: str, text: str, every_min: int = 60):
+    """Same failure again within an hour = no new Telegram message (the loop retries every 10 min)."""
+    import time
+
+    key = (kind, text[:80])
+    if time.time() - _LAST_ALERT.get(key, 0) >= every_min * 60:
+        _LAST_ALERT[key] = time.time()
+        notify.status(text)
+
+
 def cmd_loop(args):
     """Run a cycle every --every minutes for --minutes minutes (GitHub cron is unreliable,
     so one long job keeps the 10-minute rhythm). One failing cycle never stops the loop."""
@@ -170,19 +183,20 @@ def cmd_loop(args):
                   "labeled": st["label"].get("labeled"), "alerts": st["alerts"], "pro": st.get("pro"),
                   "news": st.get("news")}), flush=True)
         except Exception as e:  # noqa: BLE001
-            notify.status(f"IOI cycle in loop FAILED: {str(e)[:400]}")
+            db.reset_engine()  # drop broken connections so the next cycle starts clean
+            _loop_alert("cycle", f"IOI cycle in loop FAILED: {str(e)[:400]}")
         try:
             _maybe_scheduled_jobs()
         except Exception as e:  # noqa: BLE001
-            notify.status(f"IOI could not start daily/weekly: {str(e)[:300]}")
+            _loop_alert("sched", f"IOI could not start daily/weekly: {str(e)[:300]}")
         try:
             _maybe_marketing()
         except Exception as e:  # noqa: BLE001
-            notify.status(f"IOI marketing bot FAILED: {str(e)[:400]}")
+            _loop_alert("mkt", f"IOI marketing bot FAILED: {str(e)[:400]}")
         try:
             _maybe_social()
         except Exception as e:  # noqa: BLE001
-            notify.status(f"IOI social post FAILED: {str(e)[:400]}")
+            _loop_alert("social", f"IOI social post FAILED: {str(e)[:400]}")
         n += 1
         wait = every - (time.time() - start)
         if time.time() + wait >= end - 60:

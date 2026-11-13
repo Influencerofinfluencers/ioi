@@ -84,12 +84,21 @@ def engine():
             url = "postgresql+psycopg://" + url[len("postgres://"):]
         elif url.startswith("postgresql://"):
             url = "postgresql+psycopg://" + url[len("postgresql://"):]
-        _engine = create_engine(url, pool_pre_ping=True)
+        if url.startswith("postgresql"):
+            # Supabase session pooler allows 15 clients in total, shared by every run:
+            # keep this process to at most 2 connections and recycle them.
+            _engine = create_engine(url, pool_pre_ping=True, pool_size=1, max_overflow=1, pool_recycle=600)
+        else:
+            _engine = create_engine(url, pool_pre_ping=True)
     return _engine
 
 
 def reset_engine():
+    """Close every pooled connection before dropping the engine (otherwise each loop
+    cycle leaked an idle connection until the pooler was full)."""
     global _engine
+    if _engine is not None:
+        _engine.dispose()
     _engine = None
 
 

@@ -470,3 +470,14 @@ def test_news_label_accepts_wrapped_json(env, monkeypatch):
     r = db.rows("SELECT topics, impact, teaser FROM news WHERE id = 'a'")[0]
     assert r["topics"] == '["BTC"]' and r["impact"] == 7 and r["teaser"] == "Hook. Fact."
     assert db.rows("SELECT story FROM news WHERE id = 'a'")[0]["story"] == "bigstory"
+
+
+def test_reset_engine_disposes(env):
+    from ioi import db
+
+    e = db.engine()
+    disposed = []
+    orig = e.dispose
+    e.dispose = lambda *a, **k: (disposed.append(1), orig(*a, **k))
+    db.reset_engine()
+    assert disposed and db._engine is None
