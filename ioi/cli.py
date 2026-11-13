@@ -325,6 +325,7 @@ def main(argv=None):
             _print({"rendered": bool(img), "sent": ok})
         elif c == "social-status":
             rows = db.rows("SELECT created_at, topic, results FROM social_posts ORDER BY created_at DESC LIMIT 5")
+            from . import config
             if rows and config.X_BEARER_TOKEN:  # one cheap read: does the newest X post carry the card?
                 import httpx
 
