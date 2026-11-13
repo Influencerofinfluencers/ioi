@@ -39,7 +39,7 @@ def _chunks(text: str):
         text = text[cut:].lstrip("\n")
 
 
-def send(chat_id: str, text: str, is_html: bool = True) -> bool:
+def send(chat_id: str, text: str, is_html: bool = True, buttons: list | None = None) -> bool:
     if not (config.TELEGRAM_BOT_TOKEN and chat_id):
         log.info("telegram not configured, message:\n%s", text[:500])
         return False
@@ -52,6 +52,7 @@ def send(chat_id: str, text: str, is_html: bool = True) -> bool:
                 "text": part,
                 "parse_mode": "HTML" if is_html else None,
                 "disable_web_page_preview": True,
+                **({"reply_markup": {"inline_keyboard": buttons}} if buttons else {}),
             },
             timeout=30,
         )

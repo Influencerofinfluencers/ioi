@@ -353,7 +353,7 @@ def test_cards_upload_top50_and_scout(env, monkeypatch, tmp_path):
                  "TELEGRAM_PUBLIC_CHAT_ID": "-1", "TELEGRAM_STATUS_CHAT_ID": "9"}.items():
         monkeypatch.setattr(config, k, v)
     seen, status_msgs = [], []
-    monkeypatch.setattr(notify, "send", lambda chat, text, is_html=True: status_msgs.append((chat, text)) or True)
+    monkeypatch.setattr(notify, "send", lambda chat, text, is_html=True, buttons=None: status_msgs.append((chat, text, buttons)) or True)
 
     def fake_post(url, json=None, headers=None, timeout=None, files=None, data=None, content=None):
         seen.append((url, json, bool(files or content)))
@@ -361,6 +361,9 @@ def test_cards_upload_top50_and_scout(env, monkeypatch, tmp_path):
         if url.endswith("/media/upload"):
             return httpx.Response(200, json={"data": {"id": "m1"}}, request=req)
         if url.endswith("/tweets"):
+            if "reply" in json:  # approved reply
+                assert json["reply"]["in_reply_to_tweet_id"].isdigit() and "@" not in json["text"]
+                return httpx.Response(201, json={"data": {"id": "77"}}, request=req)
             assert json["media"]["media_ids"] == ["m1"]
             return httpx.Response(201, json={"data": {"id": "9"}}, request=req)
         if url.endswith("createSession"):
@@ -378,12 +381,25 @@ def test_cards_upload_top50_and_scout(env, monkeypatch, tmp_path):
     r = social.weekly_top50()
     assert r["image"] and r["results"]["x"].endswith("/9") and r["results"]["telegram"] == "ok"
     assert "Eric Balchunas" in r["text"] and "@" not in r["text"]  # no automated tags on X
-    assert any("@EricBalchunas" in t for _, t in status_msgs)  # owner gets the tag tip
+    assert any("@EricBalchunas" in m[1] for m in status_msgs)  # owner gets the tag tip
     assert any(u.endswith("sendPhoto") for u, _, _ in seen)
 
     monkeypatch.setattr(llm, "complete", lambda *a, **k: '[{"i": 0, "reply": "5 of our 50 accounts are on this, Eric Balchunas was first. https://x.co @a"}]')
     status_msgs.clear()
     out = scout.run_once()
     assert out == {"sent": 1}
-    msg = status_msgs[-1][1]
+    _, msg, buttons = status_msgs[-1]
     assert "x.com/" in msg and "Eric Balchunas" in msg and "https://x.co" not in msg.split("<code>")[1]
+    tid = buttons[0][0]["callback_data"].split(":")[1]
+    assert buttons[0][0]["callback_data"].startswith("rp:") and tid.isdigit()
+
+    # owner taps "Plaats op X" -> reply posted once; a stranger's tap is ignored
+    tg_calls = []
+    from ioi import pro
+    monkeypatch.setattr(pro, "tg", lambda method, **p: tg_calls.append(method) or True)
+    cq = {"id": "c1", "data": f"rp:{tid}", "message": {"message_id": 5, "chat": {"id": 9}}}
+    assert scout.handle_button({**cq, "message": {"message_id": 5, "chat": {"id": 1234}}}) == "ignored"
+    assert scout.handle_button(cq) == "posted"
+    assert "Geplaatst" in status_msgs[-1][1] and "x.com/i/status/77" in status_msgs[-1][1]
+    assert scout.handle_button(cq) == "done-before"  # double tap never posts twice
+    assert sum(1 for u, j, _ in seen if u.endswith("/tweets") and "reply" in (j or {})) == 1

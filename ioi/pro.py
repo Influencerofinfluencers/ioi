@@ -92,11 +92,19 @@ HELP = ("👋 This is the IOI bot.\n\n<b>IOI Pro member?</b> Send me the e-mail 
 
 def handle_messages(members: dict | None) -> tuple[int, dict | None]:
     offset = int(_kv("tg_offset") or 0)
-    updates = tg("getUpdates", offset=offset, timeout=0, allowed_updates=["message"])
+    updates = tg("getUpdates", offset=offset, timeout=0, allowed_updates=["message", "callback_query"])
     invited = 0
     checkout = config.PRO_CHECKOUT_URL or config.SITE_URL + "/#pricing"
     for u in updates:
         _kv("tg_offset", str(u["update_id"] + 1))
+        if u.get("callback_query"):
+            try:
+                from . import scout
+
+                scout.handle_button(u["callback_query"])
+            except Exception as e:  # noqa: BLE001
+                log.warning("button failed: %s", e)
+            continue
         msg = u.get("message") or {}
         chat, sender = msg.get("chat") or {}, msg.get("from") or {}
         if chat.get("type") != "private" or sender.get("is_bot"):
@@ -149,6 +157,15 @@ def remove_expired(members: dict) -> int:
                 f"Renew any time: {config.PRO_CHECKOUT_URL or config.SITE_URL}")
         removed += 1
     return removed
+
+
+def poll() -> int:
+    """Light check between cycles (every ~30 s): buttons and Pro e-mails, no membership sweep."""
+    if not (config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_PRO_CHAT_ID):
+        return 0
+    if not enabled():
+        return 0
+    return handle_messages(None)[0]
 
 
 def sync() -> dict:

@@ -123,6 +123,21 @@ def post_x(text: str, image=None) -> str:
     return "https://x.com/i/status/" + r.json()["data"]["id"]
 
 
+def post_x_reply(text: str, in_reply_to: str) -> str:
+    """Only ever called after the owner tapped 'Plaats op X' for this exact text."""
+    if not all([config.X_API_KEY, config.X_API_SECRET, config.X_ACCESS_TOKEN, config.X_ACCESS_SECRET]):
+        raise RuntimeError("X keys missing")
+    text = clean(text)
+    if ADVICE.search(text):
+        raise ValueError("safety check")
+    url = f"{config.X_API_BASE}/tweets"
+    r = httpx.post(url, json={"text": text, "reply": {"in_reply_to_tweet_id": in_reply_to}},
+                   headers={"Authorization": _oauth1("POST", url)}, timeout=30)
+    if r.status_code not in (200, 201):
+        raise RuntimeError(f"X {r.status_code}: {r.text[:200]}")
+    return "https://x.com/i/status/" + r.json()["data"]["id"]
+
+
 def _facets(text: str) -> list:
     out = []
     for m in URL.finditer(text):

@@ -6,8 +6,9 @@ The owner posts them by hand (one tap): X forbids automated unsolicited replies.
 import html
 import json
 import logging
+import re
 
-from . import config, db, influence, llm, notify
+from . import config, db, influence, llm, notify, pro
 
 log = logging.getLogger("ioi.scout")
 
@@ -63,12 +64,56 @@ def run_once() -> dict:
                 replies[int(item["i"])] = text
         except (KeyError, TypeError, ValueError):
             continue
-    lines = ["\U0001F4AC <b>Reply-voorstellen</b> (open de link, plak de tekst, klaar):"]
+    sent = 0
     for i, p in enumerate(posts):
-        if i in replies:
-            lines.append(f'\n<b>{html.escape(p["name"])}</b> · {html.escape(p["topic"])} · {p["likes"]} likes\n'
-                         f'{p["url"]}\n<code>{html.escape(replies[i])}</code>')
-    if len(lines) == 1:
-        return {"skipped": "no usable replies"}
-    notify.send(config.TELEGRAM_STATUS_CHAT_ID, "\n".join(lines))
-    return {"sent": len(lines) - 1}
+        tid = tweet_id(p["url"])
+        if i not in replies or not tid:
+            continue
+        pro._kv(f"reply-{tid}", json.dumps({"text": replies[i], "url": p["url"], "state": "new"}))
+        msg = (f'\U0001F4AC <b>Reply {sent + 1}</b> · {html.escape(p["name"])} · {html.escape(p["topic"])} · {p["likes"]} likes\n'
+               f'{p["url"]}\n\n<code>{html.escape(replies[i])}</code>\n\n'
+               f'<i>Tik op de tekst om te kopiëren, of laat de bot hem plaatsen.</i>')
+        if notify.send(config.TELEGRAM_STATUS_CHAT_ID, msg, buttons=[[
+                {"text": "\u2705 Plaats op X", "callback_data": f"rp:{tid}"},
+                {"text": "\u274C Overslaan", "callback_data": f"rs:{tid}"}]]):
+            sent += 1
+    return {"sent": sent} if sent else {"skipped": "no usable replies"}
+
+
+def tweet_id(url: str) -> str | None:
+    m = re.search(r"/status/(\d+)", url or "")
+    return m.group(1) if m else None
+
+
+def handle_button(cq: dict) -> str:
+    """Owner tapped a button under a suggestion. Only the owner's status chat counts."""
+    chat = str(((cq.get("message") or {}).get("chat") or {}).get("id", ""))
+    if chat != str(config.TELEGRAM_STATUS_CHAT_ID):
+        pro.tg("answerCallbackQuery", callback_query_id=cq["id"], text="Not allowed")
+        return "ignored"
+    action, _, tid = (cq.get("data") or "").partition(":")
+    raw = pro._kv(f"reply-{tid}")
+    item = json.loads(raw) if raw else None
+    msg_id = cq["message"]["message_id"]
+    if not item or item.get("state") != "new":
+        pro.tg("answerCallbackQuery", callback_query_id=cq["id"], text="Al afgehandeld")
+        return "done-before"
+    if action == "rs":
+        item["state"] = "skipped"
+        result = "\u274C Overgeslagen"
+    else:
+        from .social import post_x_reply
+
+        try:
+            url = post_x_reply(item["text"], tid)
+            item["state"], item["posted"] = "posted", url
+            result = f"\u2705 Geplaatst: {url}"
+        except Exception as e:  # noqa: BLE001
+            item["state"] = "failed"
+            result = ("\u26A0\uFE0F X weigerde de reply (" + html.escape(str(e)[:120]) + "). "
+                      "Plaats hem zelf: open de link en plak de tekst.")
+    pro._kv(f"reply-{tid}", json.dumps(item))
+    pro.tg("answerCallbackQuery", callback_query_id=cq["id"], text=result[:180])
+    pro.tg("editMessageReplyMarkup", chat_id=chat, message_id=msg_id, reply_markup={"inline_keyboard": []})
+    notify.send(chat, result)
+    return item["state"]
