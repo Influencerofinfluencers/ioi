@@ -15,7 +15,10 @@ SYSTEM = """You write short reply suggestions for the X account of {brand}, whic
 influential {audience} voices say and who said it first.
 For each post you get the post summary plus IOI data about that topic. Write ONE reply per post that adds
 a real data point from IOI (how many of the tracked accounts talk about it, who was first and when,
-how far above normal). Max 200 characters. Friendly, specific, no hype, no hashtags, no links, no @mentions.
+how far above normal). Max 200 characters. Sound like a sharp human analyst, not a bot: never start with "IOI" or a label, vary the
+opening (a reaction to the post, a question, a number), refer to what the post is about, and use "we track"
+at most once. Friendly, specific, no hype, no hashtags, no links, no @mentions, no exact timestamps unless
+it is striking (e.g. "hours before everyone else").
 Never give buy/sell advice or price predictions. {rules}
 Return a JSON list: [{{"i": <index>, "reply": "<text>"}}]"""
 

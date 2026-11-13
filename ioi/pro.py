@@ -178,8 +178,8 @@ def check() -> dict:
         ms = whop_members()
         out["whop_ok"] = True
         out["whop_memberships"] = len(ms)
-        out["whop_statuses"] = sorted({m["status"] for m in ms})
-        out["whop_emails_visible"] = all(m["email"] for m in ms) if ms else "no members yet"
+        out["whop_statuses"] = sorted({m["status"] for m in ms.values()})
+        out["whop_emails_visible"] = all(m["email"] for m in ms.values()) if ms else "no members yet"
     except Exception as e:  # noqa: BLE001
         out["whop_ok"] = False
         out["whop_error"] = str(e)[:300]
