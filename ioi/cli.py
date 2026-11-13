@@ -117,6 +117,29 @@ def _maybe_scheduled_jobs():
     return started
 
 
+SCOUT_SLOTS_UTC = ((8, 30), (13, 0), (17, 30))  # ~09:30, 14:00, 18:30 Amsterdam (winter)
+
+
+def _maybe_marketing():
+    """Reply suggestions 3x a day, Top 50 card on Mondays - each at most once (kv marks)."""
+    from datetime import datetime, timezone
+
+    from . import pro, scout, social
+
+    now = datetime.now(timezone.utc)
+    mins, today, done = now.hour * 60 + now.minute, now.strftime("%Y-%m-%d"), []
+    for h, m in SCOUT_SLOTS_UTC:
+        mark = f"scout-{today}-{h}"
+        if 0 <= mins - (h * 60 + m) < 60 and pro._kv(mark) != "1":
+            pro._kv(mark, "1")
+            done.append(("scout", scout.run_once()))
+    week = now.strftime("%G-%V")
+    if now.weekday() == 0 and mins >= 9 * 60 + 5 and pro._kv("top50_week") != week:
+        pro._kv("top50_week", week)
+        done.append(("top50", social.weekly_top50()))
+    return done
+
+
 def cmd_loop(args):
     """Run a cycle every --every minutes for --minutes minutes (GitHub cron is unreliable,
     so one long job keeps the 10-minute rhythm). One failing cycle never stops the loop."""
@@ -138,6 +161,10 @@ def cmd_loop(args):
             _maybe_scheduled_jobs()
         except Exception as e:  # noqa: BLE001
             notify.status(f"IOI could not start daily/weekly: {str(e)[:300]}")
+        try:
+            _maybe_marketing()
+        except Exception as e:  # noqa: BLE001
+            notify.status(f"IOI marketing bot FAILED: {str(e)[:400]}")
         try:
             _maybe_social()
         except Exception as e:  # noqa: BLE001
@@ -259,6 +286,22 @@ def main(argv=None):
             from . import social
 
             _print(social.run_once())
+        elif c == "top50-post":
+            from . import social
+
+            _print(social.weekly_top50())
+        elif c == "card-test":
+            from . import cards, config, influence
+
+            cs = influence.consensus(hours=24, top=1)
+            tracked = db.rows("SELECT COUNT(*) AS n FROM accounts WHERE active = 1")[0]["n"]
+            img = cards.highlight(cs[0], tracked) if cs else None
+            ok = bool(img) and notify.photo(config.TELEGRAM_STATUS_CHAT_ID, img, "IOI card test (only you see this)")
+            _print({"rendered": bool(img), "sent": ok})
+        elif c == "scout":
+            from . import scout
+
+            _print(scout.run_once())
         elif c == "weekly":
             from . import publish, weekly
 

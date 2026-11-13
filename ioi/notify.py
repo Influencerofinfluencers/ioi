@@ -61,6 +61,20 @@ def send(chat_id: str, text: str, is_html: bool = True) -> bool:
     return ok
 
 
+def photo(chat_id: str, image, caption: str) -> bool:
+    if not (config.TELEGRAM_BOT_TOKEN and chat_id):
+        return False
+    try:
+        with open(image, "rb") as fh:
+            r = httpx.post(f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/sendPhoto",
+                           data={"chat_id": chat_id, "caption": caption[:1000], "parse_mode": "HTML"},
+                           files={"photo": ("card.png", fh, "image/png")}, timeout=60)
+        return r.status_code == 200
+    except Exception as e:  # noqa: BLE001
+        log.warning("telegram photo failed: %s", e)
+        return False
+
+
 def status(text: str) -> bool:
     return send(config.TELEGRAM_STATUS_CHAT_ID, html.escape(text, quote=False))
 

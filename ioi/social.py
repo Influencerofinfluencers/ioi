@@ -17,7 +17,7 @@ from urllib.parse import quote
 
 import httpx
 
-from . import config, db, influence, llm, notify
+from . import cards, config, db, influence, llm, notify
 
 log = logging.getLogger("ioi.social")
 
@@ -92,11 +92,32 @@ def _oauth1(method: str, url: str) -> str:
     return "OAuth " + ", ".join(f'{enc(k)}="{enc(v)}"' for k, v in sorted(p.items()))
 
 
-def post_x(text: str) -> str:
+def _x_upload(image) -> str | None:
+    """Upload a PNG to X (v2 media endpoint, v1.1 as backup). None = post without image."""
+    for url, id_of in ((f"{config.X_API_BASE}/media/upload", lambda j: (j.get("data") or {}).get("id")),
+                       ("https://upload.twitter.com/1.1/media/upload.json", lambda j: j.get("media_id_string"))):
+        try:
+            with open(image, "rb") as fh:
+                r = httpx.post(url, headers={"Authorization": _oauth1("POST", url)},
+                               files={"media": ("card.png", fh, "image/png")},
+                               data={"media_category": "tweet_image"}, timeout=60)
+            if r.status_code in (200, 201) and id_of(r.json()):
+                return id_of(r.json())
+            log.warning("X media upload %s: %s %s", url, r.status_code, r.text[:200])
+        except Exception as e:  # noqa: BLE001
+            log.warning("X media upload failed: %s", e)
+    return None
+
+
+def post_x(text: str, image=None) -> str:
     if not all([config.X_API_KEY, config.X_API_SECRET, config.X_ACCESS_TOKEN, config.X_ACCESS_SECRET]):
         return "skipped"
     url = f"{config.X_API_BASE}/tweets"
-    r = httpx.post(url, json={"text": text}, headers={"Authorization": _oauth1("POST", url)}, timeout=30)
+    body = {"text": text}
+    media_id = _x_upload(image) if image else None
+    if media_id:
+        body["media"] = {"media_ids": [media_id]}
+    r = httpx.post(url, json=body, headers={"Authorization": _oauth1("POST", url)}, timeout=30)
     if r.status_code not in (200, 201):
         raise RuntimeError(f"X {r.status_code}: {r.text[:200]}")
     return "https://x.com/i/status/" + r.json()["data"]["id"]
@@ -112,7 +133,7 @@ def _facets(text: str) -> list:
     return out
 
 
-def post_bluesky(text: str) -> str:
+def post_bluesky(text: str, image=None) -> str:
     if not (config.BLUESKY_HANDLE and config.BLUESKY_APP_PASSWORD):
         return "skipped"
     base = "https://bsky.social/xrpc"
@@ -124,6 +145,15 @@ def post_bluesky(text: str) -> str:
     record = {"$type": "app.bsky.feed.post", "text": text, "createdAt": db.iso(db.now()), "langs": ["en"]}
     if f := _facets(text):
         record["facets"] = f
+    if image:
+        try:
+            up = httpx.post(f"{base}/com.atproto.repo.uploadBlob", content=open(image, "rb").read(), timeout=60,
+                            headers={"Authorization": f"Bearer {sess['accessJwt']}", "Content-Type": "image/png"})
+            if up.status_code == 200:
+                record["embed"] = {"$type": "app.bsky.embed.images",
+                                   "images": [{"alt": text[:290], "image": up.json()["blob"]}]}
+        except Exception as e:  # noqa: BLE001
+            log.warning("bluesky image upload failed: %s", e)
     r = httpx.post(f"{base}/com.atproto.repo.createRecord",
                    headers={"Authorization": f"Bearer {sess['accessJwt']}"},
                    json={"repo": sess["did"], "collection": "app.bsky.feed.post", "record": record}, timeout=30)
@@ -132,9 +162,11 @@ def post_bluesky(text: str) -> str:
     return "https://bsky.app/profile/" + config.BLUESKY_HANDLE + "/post/" + r.json()["uri"].rsplit("/", 1)[-1]
 
 
-def post_telegram(text: str) -> str:
+def post_telegram(text: str, image=None) -> str:
     if not config.TELEGRAM_PUBLIC_CHAT_ID:
         return "skipped"
+    if image and notify.photo(config.TELEGRAM_PUBLIC_CHAT_ID, image, notify.html.escape(text, quote=False)):
+        return "ok"
     return "ok" if notify.send(config.TELEGRAM_PUBLIC_CHAT_ID, notify.html.escape(text, quote=False)) else "failed"
 
 
@@ -150,17 +182,39 @@ def run_once() -> dict:
     if not c:
         return {"skipped": "nothing new worth posting"}
     text = write(c)
+    tracked = db.rows("SELECT COUNT(*) AS n FROM accounts WHERE active = 1")[0]["n"]
+    image = cards.highlight(c, tracked)
+    return _publish(c["topic"], text, image)
+
+
+def _publish(topic: str, text: str, image=None, extra_status: str = "") -> dict:
     link = config.SITE_URL + "/"
     with_link = f"{text}\n\n{link}"
     results, errors = {}, []
     for name, fn, body in (("x", post_x, text), ("bluesky", post_bluesky, with_link), ("telegram", post_telegram, with_link)):
         try:
-            results[name] = fn(body)
+            results[name] = fn(body, image)
         except Exception as e:  # noqa: BLE001 - one platform failing must not stop the others
             results[name] = "error"
             errors.append(f"{name}: {e}")
     db.run("INSERT INTO social_posts (id, created_at, topic, text, results) VALUES (:id, :c, :t, :x, :r)",
-           id=f"{c['topic']}-{db.iso(db.now())}", c=db.iso(db.now()), t=c["topic"], x=text, r=json.dumps(results))
+           id=f"{topic}-{db.iso(db.now())}", c=db.iso(db.now()), t=topic, x=text, r=json.dumps(results))
     posted = [k for k, v in results.items() if v not in ("skipped", "error", "failed")]
-    notify.status(f"IOI posted ({', '.join(posted) or 'nowhere'}):\n{text}" + ("\nERRORS: " + "; ".join(errors) if errors else ""))
-    return {"topic": c["topic"], "text": text, "results": results, "errors": errors}
+    notify.status(f"IOI posted ({', '.join(posted) or 'nowhere'}{', with card' if image else ''}):\n{text}"
+                  + ("\nERRORS: " + "; ".join(errors) if errors else "") + extra_status)
+    return {"topic": topic, "text": text, "results": results, "errors": errors, "image": bool(image)}
+
+
+def weekly_top50() -> dict:
+    """Monday: the ranking card. Tags are NOT automated (X rules); the owner gets a ready tag-reply."""
+    board = influence.leaderboard(days=7)
+    if not board or board[0]["score"] <= 0:
+        return {"skipped": "no ranking yet"}
+    week = "WEEK " + db.now().strftime("%V")
+    top = board[:3]
+    text = ("\U0001F3C6 IOI Top 50, " + week.title() + ": who really moved crypto, ranked on who raised topics first, "
+            "not on followers. 1. " + top[0]["name"] + " 2. " + top[1]["name"] + " 3. " + top[2]["name"])
+    handles = " ".join("@" + r["handle"].lstrip("@") for r in top if r["platform"] == "x")
+    tip = (f"\n\nTAG-TIP (zelf plaatsen, 10 sec): reply op je eigen X-post met:\n"
+           f"Congrats {handles} \U0001F44F Full ranking in our bio." if handles else "")
+    return _publish("TOP50-" + week, clean(text), cards.top50(board, week), extra_status=tip)

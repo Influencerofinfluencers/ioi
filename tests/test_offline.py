@@ -197,7 +197,9 @@ def test_parse_json_salvages_truncated_reply():
 
 
 def test_landing_teasers_and_social(env, monkeypatch):
-    from ioi import config, digest, influence, label, llm, notify, publish, social
+    from ioi import cards, config, digest, influence, label, llm, notify, publish, social
+
+    monkeypatch.setattr(cards, "_chrome", lambda: None)  # no images in this test
 
     db = env
     seed_posts(db)
@@ -334,3 +336,54 @@ def test_llm_fallback_chain(monkeypatch):
     monkeypatch.setattr(config, "OPENAI_API_KEY", "")
     with pytest.raises(llm.LLMError):
         llm.complete("s", "u", "claude-x", provider="anthropic")
+
+
+def test_cards_upload_top50_and_scout(env, monkeypatch, tmp_path):
+    from ioi import cards, config, label, llm, notify, scout, social
+
+    db = env
+    seed_posts(db)
+    monkeypatch.setattr(llm, "complete", fake_complete)
+    label.label_pending()
+    img = tmp_path / "card.png"
+    img.write_bytes(b"\x89PNG" + b"0" * 6000)
+    monkeypatch.setattr(cards, "render", lambda *a, **k: img)
+    for k, v in {"X_API_KEY": "k", "X_API_SECRET": "s", "X_ACCESS_TOKEN": "t", "X_ACCESS_SECRET": "ts",
+                 "BLUESKY_HANDLE": "ioi.bsky.social", "BLUESKY_APP_PASSWORD": "p", "TELEGRAM_BOT_TOKEN": "b",
+                 "TELEGRAM_PUBLIC_CHAT_ID": "-1", "TELEGRAM_STATUS_CHAT_ID": "9"}.items():
+        monkeypatch.setattr(config, k, v)
+    seen, status_msgs = [], []
+    monkeypatch.setattr(notify, "send", lambda chat, text, is_html=True: status_msgs.append((chat, text)) or True)
+
+    def fake_post(url, json=None, headers=None, timeout=None, files=None, data=None, content=None):
+        seen.append((url, json, bool(files or content)))
+        req = httpx.Request("POST", url)
+        if url.endswith("/media/upload"):
+            return httpx.Response(200, json={"data": {"id": "m1"}}, request=req)
+        if url.endswith("/tweets"):
+            assert json["media"]["media_ids"] == ["m1"]
+            return httpx.Response(201, json={"data": {"id": "9"}}, request=req)
+        if url.endswith("createSession"):
+            return httpx.Response(200, json={"accessJwt": "j", "did": "did:plc:me"}, request=req)
+        if url.endswith("uploadBlob"):
+            return httpx.Response(200, json={"blob": {"ref": "b1"}}, request=req)
+        if url.endswith("createRecord"):
+            assert json["record"]["embed"]["images"][0]["image"] == {"ref": "b1"}
+            return httpx.Response(200, json={"uri": "at://x/app.bsky.feed.post/p1"}, request=req)
+        if url.endswith("sendPhoto"):
+            return httpx.Response(200, json={"ok": True}, request=req)
+        raise AssertionError(url)
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    r = social.weekly_top50()
+    assert r["image"] and r["results"]["x"].endswith("/9") and r["results"]["telegram"] == "ok"
+    assert "Eric Balchunas" in r["text"] and "@" not in r["text"]  # no automated tags on X
+    assert any("@EricBalchunas" in t for _, t in status_msgs)  # owner gets the tag tip
+    assert any(u.endswith("sendPhoto") for u, _, _ in seen)
+
+    monkeypatch.setattr(llm, "complete", lambda *a, **k: '[{"i": 0, "reply": "5 of our 50 accounts are on this, Eric Balchunas was first. https://x.co @a"}]')
+    status_msgs.clear()
+    out = scout.run_once()
+    assert out == {"sent": 1}
+    msg = status_msgs[-1][1]
+    assert "x.com/" in msg and "Eric Balchunas" in msg and "https://x.co" not in msg.split("<code>")[1]

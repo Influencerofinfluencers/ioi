@@ -29,6 +29,8 @@ jobs:
       OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
       LLM_FALLBACK_MODELS: ${{ vars.LLM_FALLBACK_MODELS }}
       WRITE_MODEL: ${{ vars.WRITE_MODEL || 'claude-sonnet-5-5' }}
+      LABEL_MODEL: ${{ vars.LABEL_MODEL || 'claude-haiku-5-5' }}
+      SITE_URL: ${{ vars.SITE_URL }}
       WHOP_API_KEY: ${{ secrets.WHOP_API_KEY }}
       WHOP_COMPANY_ID: ${{ vars.WHOP_COMPANY_ID || 'biz_GUESEKFlsYSx61' }}
       WHOP_PRODUCT_ID: ${{ vars.WHOP_PRODUCT_ID || 'prod_o2ZmqDV2AoSr0' }}
@@ -44,4 +46,8 @@ jobs:
       - run: python -m ioi.cli pro-check
         continue-on-error: true
       - run: python -m ioi.cli llm-check
+        continue-on-error: true
+      - run: python -m ioi.cli card-test
+        continue-on-error: true
+      - run: python -m ioi.cli scout
         continue-on-error: true
