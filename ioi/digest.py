@@ -11,11 +11,11 @@ Rules:
 - Every item ends with source links in Markdown: [Name](url).
 - {rules}
 - Language: {lang}.
-Structure (Markdown):
+Keep it under 500 words in total. Structure (Markdown):
 # <catchy title, max 8 words>
 One-sentence intro.
 ## What the top accounts are talking about
-3-6 items, biggest consensus first. For each: **TOPIC**, how many tracked accounts,
+4-5 items, biggest consensus first, max 60 words each. For each: **TOPIC**, how many tracked accounts,
 who raised it first, the mood, 1-2 sentences of context.
 ## Who moved first
 1-2 sentences on the account that led the most conversations.
@@ -47,7 +47,7 @@ def build(day: str | None = None) -> dict:
         ),
         "Data for today (JSON):\n" + json.dumps(data, ensure_ascii=False, default=str)[:60000],
         config.WRITE_MODEL,
-        max_tokens=2500,
+        max_tokens=5000,
         provider=config.WRITE_PROVIDER,
     ).strip()
     title = next((ln.lstrip("# ").strip() for ln in md.splitlines() if ln.startswith("# ")), f"IOI Daily {day}")
