@@ -324,7 +324,18 @@ def main(argv=None):
             ok = bool(img) and notify.photo(config.TELEGRAM_STATUS_CHAT_ID, img, "IOI card test (only you see this)")
             _print({"rendered": bool(img), "sent": ok})
         elif c == "social-status":
-            _print(db.rows("SELECT created_at, topic, results FROM social_posts ORDER BY created_at DESC LIMIT 5"))
+            rows = db.rows("SELECT created_at, topic, results FROM social_posts ORDER BY created_at DESC LIMIT 5")
+            if rows and config.X_BEARER_TOKEN:  # one cheap read: does the newest X post carry the card?
+                import httpx
+
+                xurl = json.loads(rows[0]["results"] or "{}").get("x", "")
+                if "/status/" in xurl:
+                    r = httpx.get(f"{config.X_API_BASE}/tweets/{xurl.rsplit('/', 1)[1]}",
+                                  params={"expansions": "attachments.media_keys", "media.fields": "type"},
+                                  headers={"Authorization": f"Bearer {config.X_BEARER_TOKEN}"}, timeout=20)
+                    rows[0]["x_media"] = (r.json().get("includes") or {}).get("media") if r.status_code == 200 \
+                        else f"{r.status_code} {r.text[:120]}"
+            _print(rows)
         elif c == "news-check":
             from . import news
 

@@ -32,6 +32,7 @@ jobs:
       OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
       WRITE_MODEL: ${{ vars.WRITE_MODEL || 'claude-sonnet-5-5' }}
       DIGEST_LANGUAGE: ${{ vars.DIGEST_LANGUAGE || 'English' }}
+      X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
       X_API_KEY: ${{ secrets.X_API_KEY }}
       X_API_SECRET: ${{ secrets.X_API_SECRET }}
       X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
