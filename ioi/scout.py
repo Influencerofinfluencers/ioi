@@ -11,6 +11,7 @@ import re
 from . import config, db, influence, llm, notify, pro
 
 log = logging.getLogger("ioi.scout")
+EXPIRE_HOURS = 3
 
 SYSTEM = """You write short reply suggestions for the X account of {brand}, which tracks what the 50 most
 influential {audience} voices say and who said it first.
@@ -69,7 +70,7 @@ def run_once() -> dict:
         tid = tweet_id(p["url"])
         if i not in replies or not tid:
             continue
-        pro._kv(f"reply-{tid}", json.dumps({"text": replies[i], "url": p["url"], "state": "new"}))
+        pro._kv(f"reply-{tid}", json.dumps({"text": replies[i], "url": p["url"], "state": "new", "at": db.iso(db.now())}))
         msg = (f'\U0001F4AC <b>Reply {sent + 1}</b> · {html.escape(p["name"])} · {html.escape(p["topic"])} · {p["likes"]} likes\n'
                f'{p["url"]}\n\n<code>{html.escape(replies[i])}</code>\n\n'
                f'<i>Tik op de tekst om te kopiëren, of laat de bot hem plaatsen.</i>')
@@ -98,6 +99,12 @@ def handle_button(cq: dict) -> str:
     if not item or item.get("state") != "new":
         pro.tg("answerCallbackQuery", callback_query_id=cq["id"], text="Al afgehandeld")
         return "done-before"
+    if item.get("at", "9") < db.ago(hours=EXPIRE_HOURS):  # a reply on an old post looks odd: let it expire
+        item["state"] = "expired"
+        pro._kv(f"reply-{tid}", json.dumps(item))
+        pro.tg("answerCallbackQuery", callback_query_id=cq["id"], text="Verlopen (ouder dan 3 uur)")
+        pro.tg("editMessageReplyMarkup", chat_id=chat, message_id=msg_id, reply_markup={"inline_keyboard": []})
+        return "expired"
     if action == "rs":
         item["state"] = "skipped"
         result = "\u274C Overgeslagen"
