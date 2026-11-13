@@ -19,6 +19,10 @@ One-sentence intro.
 who raised it first, the mood, 1-2 sentences of context.
 ## Who moved first
 1-2 sentences on the account that led the most conversations.
+## Newswire
+Only if the data has "newswire" items: 2-4 bullets, each = the item's teaser in your own words + [source](url).
+If "voices_minutes_ahead" > 0, say the tracked voices were that many minutes ahead of the official news;
+if < 0, say the news came first. Skip this section when there are no items.
 ## Quick hits
 3 bullets with other notable single posts.
 End with the disclaimer line in italics: {disclaimer}"""
@@ -38,6 +42,12 @@ def build(day: str | None = None) -> dict:
             s=db.ago(hours=24),
         ),
     }
+    try:
+        from . import news
+
+        data["newswire"] = news.for_digest() if config.NEWS_ENABLED else []
+    except Exception:  # noqa: BLE001 - digest never fails because of the newswire
+        data["newswire"] = []
     if not data["consensus"] and not data["quick_hits"]:
         raise RuntimeError("no labelled posts in the last 24h - run fetch + label first")
     md = llm.complete(

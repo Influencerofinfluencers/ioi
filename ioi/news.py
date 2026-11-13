@@ -1,0 +1,287 @@
+"""Newswire layer: the fastest official / primary sources, kept SEPARATE from the 50 tracked voices
+(so "N of 50 accounts" stays clean). Used for:
+  - Pro "newswire" alerts: a market-moving item (listing, regulator, ETF filing, hack) the moment it
+    appears, with how many of the 50 voices already talk about it;
+  - "who was faster than the news" stats for the digest and the ranking;
+  - creative teasers in our own words (never copied article text; always a link to the source).
+
+Rules (agreed with the owner): only official APIs / RSS, polite polling, no bypassing bot protection,
+no paywalled or licensed content, headline facts + own teaser + link, no buy/sell language.
+"""
+import hashlib
+import json
+import logging
+import re
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+
+import feedparser
+import httpx
+
+from . import config, db, influence, llm, notify
+
+log = logging.getLogger("ioi.news")
+UA = {"User-Agent": "IOI-Influencer-of-Influencers/1.0 (+https://influencerofinfluencers.github.io/ioi/)"}
+CRYPTO = re.compile(r"\b(crypto|bitcoin|btc|ether(eum)?|eth|solana|sol|xrp|stablecoin|digital asset|token|blockchain|defi|etf)\b", re.I)
+
+# kind: listing | regulator | filing | hack | media | wire
+SOURCES = [
+    # exchange listings (official endpoints)
+    {"key": "binance_listings", "name": "Binance listings", "kind": "listing", "type": "binance"},
+    {"key": "upbit_notices", "name": "Upbit notices", "kind": "listing", "type": "upbit"},
+    {"key": "coinbase_assets", "name": "Coinbase Assets", "kind": "listing", "type": "x", "handle": "CoinbaseAssets"},
+    {"key": "kraken_blog", "name": "Kraken", "kind": "listing", "type": "rss", "url": "https://blog.kraken.com/feed"},
+    # regulators + filings (public sector)
+    {"key": "sec_press", "name": "SEC", "kind": "regulator", "type": "rss", "url": "https://www.sec.gov/news/pressreleases.rss"},
+    {"key": "cftc_press", "name": "CFTC", "kind": "regulator", "type": "rss", "url": "https://www.cftc.gov/RSS/RSSGP/rssgp.xml", "filter": True},
+    {"key": "fed_press", "name": "Federal Reserve", "kind": "regulator", "type": "rss", "url": "https://www.federalreserve.gov/feeds/press_all.xml"},
+    {"key": "sec_s1", "name": "SEC EDGAR S-1", "kind": "filing", "type": "rss", "filter": True,
+     "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=S-1&company=&dateb=&owner=include&count=40&output=atom"},
+    {"key": "sec_19b4", "name": "SEC EDGAR 19b-4", "kind": "filing", "type": "rss", "filter": True,
+     "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=19b-4&company=&dateb=&owner=include&count=40&output=atom"},
+    # hack / exploit alerts
+    {"key": "peckshield", "name": "PeckShieldAlert", "kind": "hack", "type": "x", "handle": "PeckShieldAlert"},
+    {"key": "certik", "name": "CertiK Alert", "kind": "hack", "type": "x", "handle": "CertiKAlert"},
+    # fast wires
+    {"key": "bwenews", "name": "BWEnews", "kind": "wire", "type": "telegram", "handle": "BWEnews"},
+    # established media (headline + link only)
+    {"key": "coindesk_rss", "name": "CoinDesk", "kind": "media", "type": "rss", "url": "https://www.coindesk.com/arc/outboundfeeds/rss/"},
+    {"key": "cointelegraph_rss", "name": "Cointelegraph", "kind": "media", "type": "rss", "url": "https://cointelegraph.com/rss"},
+    {"key": "theblock_rss", "name": "The Block", "kind": "media", "type": "rss", "url": "https://www.theblock.co/rss.xml"},
+    {"key": "btcmag_rss", "name": "Bitcoin Magazine", "kind": "media", "type": "rss", "url": "https://bitcoinmagazine.com/.rss/full/"},
+    # aggregator (only if a free CryptoPanic token is configured)
+    {"key": "cryptopanic", "name": "CryptoPanic", "kind": "media", "type": "cryptopanic"},
+]
+FAST_KINDS = {"listing", "regulator", "filing", "hack", "wire"}
+MAX_FAILS = 5
+
+
+def _state(key: str) -> dict:
+    from .pro import _kv
+
+    raw = _kv(f"news-{key}")
+    return json.loads(raw) if raw else {}
+
+
+def _save_state(key: str, st: dict):
+    from .pro import _kv
+
+    _kv(f"news-{key}", json.dumps(st))
+
+
+def _ts(value) -> str:
+    if isinstance(value, (int, float)):
+        return db.iso(datetime.fromtimestamp(value / (1000 if value > 1e11 else 1), tz=timezone.utc))
+    try:
+        return db.iso(parsedate_to_datetime(value))
+    except Exception:  # noqa: BLE001
+        try:
+            return db.iso(datetime.fromisoformat(str(value).replace("Z", "+00:00")))
+        except Exception:  # noqa: BLE001
+            return db.iso(db.now())
+
+
+# ---------- fetchers: each returns [{"title", "url", "at"}] ----------
+
+def _rss(src):
+    r = httpx.get(src["url"], headers=UA, timeout=30, follow_redirects=True)
+    r.raise_for_status()
+    feed = feedparser.parse(r.content)
+    out = []
+    for e in feed.entries[:30]:
+        title = (e.get("title") or "").strip()
+        if not title:
+            continue
+        if src.get("filter") and not CRYPTO.search(title + " " + (e.get("summary") or "")):
+            continue
+        when = e.get("published") or e.get("updated") or ""
+        out.append({"title": title[:300], "url": e.get("link") or src["url"], "at": _ts(when)})
+    return out
+
+
+def _binance(src):
+    r = httpx.get("https://www.binance.com/bapi/composite/v1/public/cms/article/list/query",
+                  params={"type": 1, "catalogId": 48, "pageNo": 1, "pageSize": 15}, headers=UA, timeout=30)
+    r.raise_for_status()
+    cats = (r.json().get("data") or {}).get("catalogs") or []
+    arts = cats[0].get("articles", []) if cats else []
+    return [{"title": a["title"], "url": f"https://www.binance.com/en/support/announcement/{a['code']}",
+             "at": _ts(a.get("releaseDate") or 0)} for a in arts if a.get("title")]
+
+
+def _upbit(src):
+    r = httpx.get("https://api-manager.upbit.com/api/v1/announcements",
+                  params={"os": "web", "page": 1, "per_page": 20, "category": "trade"}, headers=UA, timeout=30)
+    r.raise_for_status()
+    notices = (r.json().get("data") or {}).get("notices") or []
+    return [{"title": n["title"], "url": f"https://upbit.com/service_center/notice?id={n['id']}",
+             "at": _ts(n.get("listed_at") or n.get("first_listed_at") or "")} for n in notices if n.get("title")]
+
+
+def _cryptopanic(src):
+    if not config.CRYPTOPANIC_TOKEN:
+        return None  # not configured: skipped silently
+    r = httpx.get("https://cryptopanic.com/api/developer/v2/posts/",
+                  params={"auth_token": config.CRYPTOPANIC_TOKEN, "filter": "important", "public": "true"},
+                  headers=UA, timeout=30)
+    r.raise_for_status()
+    return [{"title": p["title"], "url": p.get("url") or "https://cryptopanic.com",
+             "at": _ts(p.get("published_at") or "")} for p in r.json().get("results", [])[:30] if p.get("title")]
+
+
+def _social(src):
+    from .sources import SourceNotConfigured
+    from .sources import telegram as tg_src
+    from .sources import x as x_src
+
+    if src["type"] == "x" and db.x_reads_today() >= config.X_MAX_READS_PER_DAY:
+        return None  # shared X budget reached
+    st = _state(src["key"])
+    acc = {"key": src["key"], "handle": src["handle"], "last_seen_id": st.get("last_seen_id"),
+           "platform_user_id": st.get("platform_user_id")}
+    mod = x_src if src["type"] == "x" else tg_src
+    try:
+        posts = mod.fetch(acc)
+    except SourceNotConfigured:
+        return None
+    if posts:
+        st["last_seen_id"] = mod.newest_id(posts)
+    st["platform_user_id"] = acc.get("platform_user_id")
+    _save_state(src["key"], {**_state(src["key"]), **st})
+    return [{"title": re.sub(r"\s+", " ", p["text"])[:300], "url": p["url"], "at": p["created_at"],
+             "x_read": src["type"] == "x"} for p in posts if p.get("text")]
+
+
+FETCH = {"rss": _rss, "binance": _binance, "upbit": _upbit, "cryptopanic": _cryptopanic, "x": _social, "telegram": _social}
+
+
+def fetch_all() -> dict:
+    stats = {"new": 0, "errors": [], "x_reads": 0}
+    for src in SOURCES:
+        st = _state(src["key"])
+        if st.get("paused_until", "") > db.iso(db.now()):
+            continue
+        try:
+            items = FETCH[src["type"]](src)
+        except Exception as e:  # noqa: BLE001 - a source failing never stops the others
+            st = _state(src["key"])
+            st["fails"] = st.get("fails", 0) + 1
+            if st["fails"] >= MAX_FAILS:
+                st["paused_until"], st["fails"] = db.ago(hours=-24), 0
+                notify.status(f"IOI newswire: {src['name']} paused 24h after {MAX_FAILS} errors ({str(e)[:150]})")
+            _save_state(src["key"], st)
+            stats["errors"].append(f"{src['key']}: {str(e)[:120]}")
+            continue
+        if items is None:
+            continue
+        st = _state(src["key"])
+        st["fails"] = 0
+        _save_state(src["key"], st)
+        for it in items:
+            stats["x_reads"] += 1 if it.get("x_read") else 0
+            if it["at"] < db.ago(hours=48):  # no backlog of old items on first run
+                continue
+            nid = src["key"] + ":" + hashlib.sha1(it["url"].encode()).hexdigest()[:16]
+            if db.rows("SELECT 1 AS x FROM news WHERE id = :id", id=nid):
+                continue
+            db.run("""INSERT INTO news (id, source, name, kind, title, url, published_at, fetched_at, labeled)
+                      VALUES (:id, :s, :n, :k, :t, :u, :p, :f, 0)""",
+                   id=nid, s=src["key"], n=src["name"], k=src["kind"], t=it["title"], u=it["url"],
+                   p=min(it["at"], db.iso(db.now())), f=db.iso(db.now()))
+            stats["new"] += 1
+    return stats
+
+
+# ---------- labelling + teasers ----------
+
+SYSTEM = """You label crypto news headlines for {brand} and write a teaser for each.
+For each item return: topics (1-3, {topic_rules}), impact (1-10: 9-10 = market-moving right now,
+e.g. a major exchange listing, an ETF filing/approval, a big hack, a regulator action; 1-3 = minor),
+and a teaser: max 170 characters, in your OWN words (never copy the headline wording), punchy and
+creative but factual: a hook that makes people want to know more, then the key fact. No hype words
+like "moon", no emojis except at most one at the start, never buy/sell advice. {rules}
+Return a JSON list: [{{"i": <index>, "topics": [...], "impact": <int>, "teaser": "<text>"}}]"""
+
+
+def label_pending(limit: int = 30) -> dict:
+    items = db.rows("SELECT * FROM news WHERE labeled = 0 ORDER BY published_at DESC LIMIT :n", n=limit)
+    if not items:
+        return {"labeled": 0}
+    lines = "\n".join(f"{i}. [{it['name']}] {it['title']}" for i, it in enumerate(items))
+    out = llm.complete(SYSTEM.format(brand=config.BRAND, topic_rules=config.TOPIC_RULES, rules=config.CONTENT_RULES),
+                       "Headlines:\n" + lines, config.LABEL_MODEL, max_tokens=4000, provider=config.LABEL_PROVIDER)
+    from .social import ADVICE
+
+    done = 0
+    for res in llm.parse_json(out) or []:
+        try:
+            it = items[int(res["i"])]
+        except (KeyError, ValueError, IndexError, TypeError):
+            continue
+        teaser = re.sub(r"https?://\S+", "", str(res.get("teaser") or "")).strip()[:200]
+        if ADVICE.search(teaser):
+            teaser = ""
+        db.run("UPDATE news SET topics = :t, impact = :i, teaser = :te, labeled = 1 WHERE id = :id",
+               t=json.dumps([str(x).upper() for x in (res.get("topics") or [])][:3]),
+               i=int(res.get("impact") or 0), te=teaser, id=it["id"])
+        done += 1
+    # anything the model skipped: mark labeled so it never blocks the queue
+    db.run("UPDATE news SET labeled = 1 WHERE labeled = 0 AND fetched_at < :t", t=db.ago(hours=2))
+    return {"labeled": done}
+
+
+# ---------- analysis ----------
+
+def voices_on(topic: str, hours: int = 6) -> tuple[int, str | None]:
+    ms = [m for m in influence.mentions(db.ago(hours=hours)) if m["topic"] == topic]
+    first = min((m["created_at"] for m in ms), default=None)
+    return len({m["account_key"] for m in ms}), first
+
+
+def newswire_alerts(min_impact: int = 8, max_age_min: int = 45) -> list[dict]:
+    """Pro: a market-moving primary-source item, the moment it lands."""
+    sent = []
+    for it in db.rows("""SELECT * FROM news WHERE labeled = 1 AND alerted IS NULL AND impact >= :i
+                         AND published_at >= :since ORDER BY published_at""",
+                      i=min_impact, since=db.ago(minutes=max_age_min)):
+        if it["kind"] not in FAST_KINDS:
+            db.run("UPDATE news SET alerted = 'skip' WHERE id = :id", id=it["id"])
+            continue
+        topics = json.loads(it["topics"] or "[]")
+        n, _ = voices_on(topics[0]) if topics else (0, None)
+        tracked = db.rows("SELECT COUNT(*) AS n FROM accounts WHERE active = 1")[0]["n"]
+        lead = "none of our 50 voices are on it yet" if n == 0 else f"{n} of {tracked} voices already on it"
+        text = (f"\U0001F5DE <b>NEWSWIRE · {it['name']}</b>\n{notify.html.escape(it['teaser'] or it['title'])}\n"
+                f"<i>{lead}</i>\n<a href=\"{it['url']}\">Source</a>")
+        notify.send(config.TELEGRAM_PRO_CHAT_ID, text)
+        db.run("UPDATE news SET alerted = :t WHERE id = :id", t=db.iso(db.now()), id=it["id"])
+        sent.append(it["title"][:80])
+    return sent
+
+
+def for_digest(hours: int = 24, top: int = 5) -> list[dict]:
+    """Biggest primary-source items of the day + whether the voices were earlier than the news."""
+    out = []
+    for it in db.rows("""SELECT * FROM news WHERE labeled = 1 AND impact >= 6 AND published_at >= :s
+                         ORDER BY impact DESC, published_at LIMIT :n""", s=db.ago(hours=hours), n=top * 2):
+        topics = json.loads(it["topics"] or "[]")
+        n, first_voice = voices_on(topics[0], hours=hours + 6) if topics else (0, None)
+        lead = None
+        if first_voice:
+            delta = (datetime.fromisoformat(it["published_at"].replace("Z", "+00:00"))
+                     - datetime.fromisoformat(first_voice.replace("Z", "+00:00"))).total_seconds() / 60
+            lead = round(delta)  # >0: voices were earlier than the news by N minutes
+        out.append({"source": it["name"], "kind": it["kind"], "teaser": it["teaser"] or it["title"],
+                    "url": it["url"], "topic": topics[0] if topics else None, "voices": n,
+                    "voices_minutes_ahead": lead})
+        if len(out) >= top:
+            break
+    return out
+
+
+def cycle() -> dict:
+    f = fetch_all()
+    lab = label_pending()
+    alerts = newswire_alerts()
+    return {"new": f["new"], "errors": len(f["errors"]), "x_reads": f["x_reads"], "labeled": lab["labeled"],
+            "alerts": alerts}

@@ -96,6 +96,10 @@ WHOP_API_VERSION = env("WHOP_API_VERSION", "2026-11-12")
 WHOP_COMPANY_ID = env("WHOP_COMPANY_ID")
 WHOP_PRODUCT_ID = env("WHOP_PRODUCT_ID")
 
+# --- newswire (fast primary sources) ---
+NEWS_ENABLED = env("NEWS_ENABLED", "1") not in ("0", "false", "no")
+CRYPTOPANIC_TOKEN = env("CRYPTOPANIC_TOKEN")  # optional free token from cryptopanic.com/developers/api
+
 # --- automatic social posts (highlights) ---
 SOCIAL_ENABLED = env("SOCIAL_ENABLED", "1") not in ("0", "false", "no", "")
 SOCIAL_MAX_PER_DAY = env_int("SOCIAL_MAX_PER_DAY", 3)

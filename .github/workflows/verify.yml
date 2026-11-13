@@ -51,3 +51,5 @@ jobs:
         continue-on-error: true
       - run: python -m ioi.cli scout
         continue-on-error: true
+      - run: python -m ioi.cli news-check
+        continue-on-error: true

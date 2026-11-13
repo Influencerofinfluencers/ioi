@@ -40,6 +40,17 @@ def cmd_cycle(args):
     alerts = influence.new_alerts()
     for a in alerts:
         notify.alert(a)
+    news_stats = {}
+    from . import config as _cfg
+
+    if _cfg.NEWS_ENABLED:
+        from . import news
+
+        try:
+            news_stats = news.cycle()
+            f["x_reads"] = f.get("x_reads", 0) + news_stats.get("x_reads", 0)  # one shared X budget
+        except Exception as e:  # noqa: BLE001 - the newswire must never stop the core pipeline
+            news_stats = {"error": str(e)[:200]}
     teased = notify.pro_teasers()
     from . import pro
 
@@ -48,7 +59,7 @@ def cmd_cycle(args):
     except Exception as e:  # noqa: BLE001 - Pro access must never stop the data pipeline
         pro_stats = {"error": str(e)[:300]}
         notify.status(f"IOI Pro sync failed: {str(e)[:300]}")
-    stats = {"fetch": f, "label": lab, "alerts": [a["topic"] for a in alerts], "teasers": teased, "pro": pro_stats}
+    stats = {"fetch": f, "label": lab, "alerts": [a["topic"] for a in alerts], "teasers": teased, "pro": pro_stats, "news": news_stats}
     db.log_run("cycle", started, stats)
     if f["errors"]:
         notify.status("IOI: fetch errors\n" + "\n".join(f["errors"][:10]))
@@ -156,7 +167,8 @@ def cmd_loop(args):
             db.reset_engine()
             st = cmd_cycle(args)
             print(f"cycle {n + 1}: " + json.dumps({"new_posts": st["fetch"]["new_posts"], "errors": len(st["fetch"]["errors"]),
-                  "labeled": st["label"].get("labeled"), "alerts": st["alerts"], "pro": st.get("pro")}), flush=True)
+                  "labeled": st["label"].get("labeled"), "alerts": st["alerts"], "pro": st.get("pro"),
+                  "news": st.get("news")}), flush=True)
         except Exception as e:  # noqa: BLE001
             notify.status(f"IOI cycle in loop FAILED: {str(e)[:400]}")
         try:
@@ -311,6 +323,16 @@ def main(argv=None):
             img = cards.highlight(cs[0], tracked) if cs else None
             ok = bool(img) and notify.photo(config.TELEGRAM_STATUS_CHAT_ID, img, "IOI card test (only you see this)")
             _print({"rendered": bool(img), "sent": ok})
+        elif c == "news-check":
+            from . import news
+
+            f = news.fetch_all()
+            per = {r["source"]: r["n"] for r in db.rows(
+                "SELECT source, COUNT(*) AS n FROM news WHERE fetched_at >= :s GROUP BY source", s=db.ago(hours=48))}
+            report = {s["key"]: per.get(s["key"], 0) for s in news.SOURCES}
+            notify.status("IOI newswire check (items per source, 48h):\n" + "\n".join(f"{k}: {v}" for k, v in report.items())
+                          + ("\nERRORS:\n" + "\n".join(f["errors"]) if f["errors"] else ""))
+            _print({"per_source": report, "errors": f["errors"], "label": news.label_pending()})
         elif c == "scout":
             from . import scout
 

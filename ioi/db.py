@@ -49,6 +49,12 @@ SCHEMA = [
         id TEXT PRIMARY KEY, created_at TEXT, topic TEXT, text TEXT, results TEXT
     )""",
     """CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT)""",
+    """CREATE TABLE IF NOT EXISTS news (
+        id TEXT PRIMARY KEY, source TEXT, name TEXT, kind TEXT, title TEXT, url TEXT,
+        published_at TEXT, fetched_at TEXT, labeled INTEGER DEFAULT 0,
+        topics TEXT, impact INTEGER, teaser TEXT, alerted TEXT
+    )""",
+    "CREATE INDEX IF NOT EXISTS news_published ON news (published_at)",
     """CREATE TABLE IF NOT EXISTS pro_members (
         membership_id TEXT PRIMARY KEY, email TEXT, tg_user_id TEXT, status TEXT, invited_at TEXT
     )""",
@@ -122,6 +128,7 @@ def purge_old(days: int) -> int:
     """Delete posts (and their labels) older than `days`. Keeps the database small and
     honours the promise to keep data no longer than needed."""
     cutoff = ago(days=days)
+    run("DELETE FROM news WHERE published_at < :c", c=cutoff)
     run("DELETE FROM labels WHERE post_id IN (SELECT id FROM posts WHERE created_at < :c)", c=cutoff)
     return run("DELETE FROM posts WHERE created_at < :c", c=cutoff).rowcount or 0
 

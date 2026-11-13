@@ -407,3 +407,53 @@ def test_cards_upload_top50_and_scout(env, monkeypatch, tmp_path):
     assert scout.handle_button(cq) == "legacy"
     assert scout.handle_button({**cq, "message": {"message_id": 5, "chat": {"id": 1234}}}) == "ignored"
     assert not any(u.endswith("/tweets") and "reply" in (j or {}) for u, j, _ in seen)
+
+
+def test_newswire(env, monkeypatch):
+    from ioi import config, label, llm, news, notify
+
+    db = env
+    seed_posts(db)
+    monkeypatch.setattr(llm, "complete", fake_complete)
+    label.label_pending()
+    now = db.now()
+    rss = f"""<?xml version="1.0"?><rss><channel><item><title>SEC approves spot ETF for bitcoin</title>
+<link>https://www.sec.gov/news/1</link><pubDate>{now.strftime('%a, %d %b %Y %H:%M:%S +0000')}</pubDate></item>
+<item><title>Old story</title><link>https://x/old</link><pubDate>Mon, 01 Jan 2024 00:00:00 +0000</pubDate></item></channel></rss>"""
+
+    def fake_get(url, params=None, headers=None, timeout=None, follow_redirects=None):
+        req = httpx.Request("GET", url)
+        if "binance" in url:
+            return httpx.Response(200, json={"data": {"catalogs": [{"articles": [
+                {"code": "abc", "title": "Binance Will List Foo (FOO)", "releaseDate": int(now.timestamp() * 1000)}]}]}}, request=req)
+        if "upbit" in url:
+            return httpx.Response(500, request=req)  # one source down: others continue
+        return httpx.Response(200, content=rss.encode(), request=req)
+
+    monkeypatch.setattr(news.httpx, "get", fake_get)
+    monkeypatch.setattr(news, "_social", lambda src: None)  # no X/Telegram in this test
+    monkeypatch.setattr(news, "_cryptopanic", lambda src: None)
+    news.FETCH.update({"x": news._social, "telegram": news._social, "cryptopanic": news._cryptopanic})
+    f = news.fetch_all()
+    assert f["new"] >= 2 and any("upbit" in e for e in f["errors"])
+    assert not db.rows("SELECT 1 AS x FROM news WHERE title = 'Old story'")  # no backlog
+    titles = [r["title"] for r in db.rows("SELECT title FROM news")]
+    assert "Binance Will List Foo (FOO)" in titles
+
+    def fake_label(system, user, model, max_tokens=2000, provider=None):
+        lines = [ln for ln in user.splitlines()[1:] if ln.strip()]
+        return json.dumps([{"i": i, "topics": ["ETF" if "ETF" in ln else "FOO"], "impact": 9,
+                            "teaser": "Washington just blinked: the SEC gave the green light. https://spam"} for i, ln in enumerate(lines)])
+
+    monkeypatch.setattr(llm, "complete", fake_label)
+    assert news.label_pending()["labeled"] >= 2
+    sent = []
+    monkeypatch.setattr(config, "TELEGRAM_PRO_CHAT_ID", "-100pro")
+    monkeypatch.setattr(notify, "send", lambda chat, text, is_html=True, buttons=None: sent.append((chat, text)) or True)
+    alerts = news.newswire_alerts()
+    assert alerts and all(c == "-100pro" for c, _ in sent)
+    assert any("NEWSWIRE" in t and "https://spam" not in t for _, t in sent)
+    assert news.newswire_alerts() == []  # once only
+    d = news.for_digest()
+    etf = [x for x in d if x["topic"] == "ETF"][0]
+    assert etf["voices"] == 5 and etf["voices_minutes_ahead"] > 0  # the voices were ahead of the SEC
