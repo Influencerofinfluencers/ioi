@@ -108,6 +108,7 @@ MIGRATIONS = [  # columns added after v0.1; ignored when they already exist
     "ALTER TABLE labels ADD COLUMN hook TEXT",
     "ALTER TABLE runs ADD COLUMN x_reads INTEGER DEFAULT 0",
     "ALTER TABLE alerts ADD COLUMN teased_at TEXT",
+    "ALTER TABLE news ADD COLUMN story TEXT",
 ]
 
 

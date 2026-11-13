@@ -211,12 +211,23 @@ def fetch_all() -> dict:
 # ---------- labelling + teasers ----------
 
 SYSTEM = """You label crypto news headlines for {brand} and write a teaser for each.
-For each item return: topics (1-3, {topic_rules}), impact (1-10: 9-10 = market-moving right now,
-e.g. a major exchange listing, an ETF filing/approval, a big hack, a regulator action; 1-3 = minor),
-and a teaser: max 170 characters, in your OWN words (never copy the headline wording), punchy and
-creative but factual: a hook that makes people want to know more, then the key fact. No hype words
-like "moon", no emojis except at most one at the start, never buy/sell advice. {rules}
-Return a JSON list: [{{"i": <index>, "topics": [...], "impact": <int>, "teaser": "<text>"}}]"""
+For each item return:
+- topics: 1-3, {topic_rules}
+- impact: 1-10 (9-10 = market-moving right now: a major exchange listing, an ETF filing/approval,
+  a big hack, a regulator action; 1-3 = minor)
+- story: a short lowercase slug naming the underlying event (e.g. "doj-seizes-dprk-binance-funds").
+  Several outlets covering the same event MUST get the same slug. If an event matches one of the
+  known stories listed below, reuse that exact slug.
+- teaser: max 140 characters, in your OWN words (never reuse the headline's wording or structure).
+  Make it scroll-stopping: open with a sharp hook (a surprising number, a contrast, a short question,
+  or a "why it matters" angle), then land the key fact. Vary the style between items. Concrete beats
+  vague. Factual only: no invented details, no hype words like "moon", at most one emoji at the start,
+  never buy/sell advice or price predictions. {rules}
+Good teaser examples (style only):
+- "$1.2B back on the table: US prosecutors move to claw back North Korea's Binance haul."
+- "Three weeks of gains, gone by lunch. Bitcoin slips to a 12-week low as the dollar flexes."
+- "Who blinked first? The SEC just put a spot SOL ETF decision on the calendar."
+Return a JSON list: [{{"i": <index>, "topics": [...], "impact": <int>, "story": "<slug>", "teaser": "<text>"}}]"""
 
 
 def label_pending(limit: int = 30, batch: int = 10) -> dict:
@@ -234,7 +245,11 @@ def _label_batch(limit: int) -> int:
     if not items:
         return 0
     lines = "\n".join(f"{i}. [{it['name']}] {it['title']}" for i, it in enumerate(items))
-    out = llm.complete(SYSTEM.format(brand=config.BRAND, topic_rules=config.TOPIC_RULES, rules=config.CONTENT_RULES),
+    known = [r["story"] for r in db.rows("""SELECT story, MAX(published_at) AS p FROM news WHERE story IS NOT NULL
+                                             AND published_at >= :s GROUP BY story ORDER BY p DESC LIMIT 40""",
+                                          s=db.ago(hours=36))]
+    out = llm.complete(SYSTEM.format(brand=config.BRAND, topic_rules=config.TOPIC_RULES, rules=config.CONTENT_RULES)
+                       + ("\nKnown stories: " + ", ".join(known) if known else ""),
                        "Headlines:\n" + lines, config.LABEL_MODEL, max_tokens=4000, provider=config.LABEL_PROVIDER)
     from .social import ADVICE
 
@@ -250,9 +265,11 @@ def _label_batch(limit: int) -> int:
         except (KeyError, ValueError, IndexError, TypeError):
             continue
         teaser = re.sub(r"https?://\S+", "", str(res.get("teaser") or "")).strip()[:200]
+        story = re.sub(r"[^a-z0-9-]", "", str(res.get("story") or "").lower())[:80] or None
         if ADVICE.search(teaser):
             teaser = ""
-        db.run("UPDATE news SET topics = :t, impact = :i, teaser = :te, labeled = 1 WHERE id = :id",
+        db.run("UPDATE news SET topics = :t, impact = :i, teaser = :te, story = :st, labeled = 1 WHERE id = :id",
+               st=story,
                t=json.dumps([str(x).upper() for x in (res.get("topics") or [])][:3]),
                i=int(res.get("impact") or 0), te=teaser, id=it["id"])
         done += 1
@@ -275,7 +292,10 @@ def newswire_alerts(min_impact: int = 8, max_age_min: int = 45) -> list[dict]:
     for it in db.rows("""SELECT * FROM news WHERE labeled = 1 AND alerted IS NULL AND impact >= :i
                          AND published_at >= :since ORDER BY published_at""",
                       i=min_impact, since=db.ago(minutes=max_age_min)):
-        if it["kind"] not in FAST_KINDS:
+        dup = it.get("story") and db.rows("""SELECT 1 FROM news WHERE story = :s AND id != :id AND alerted IS NOT NULL
+                                             AND alerted != 'skip' AND published_at >= :since LIMIT 1""",
+                                          s=it["story"], id=it["id"], since=db.ago(hours=24))
+        if it["kind"] not in FAST_KINDS or dup:
             db.run("UPDATE news SET alerted = 'skip' WHERE id = :id", id=it["id"])
             continue
         topics = json.loads(it["topics"] or "[]")
@@ -292,9 +312,13 @@ def newswire_alerts(min_impact: int = 8, max_age_min: int = 45) -> list[dict]:
 
 def for_digest(hours: int = 24, top: int = 5) -> list[dict]:
     """Biggest primary-source items of the day + whether the voices were earlier than the news."""
-    out = []
+    out, seen = [], set()
     for it in db.rows("""SELECT * FROM news WHERE labeled = 1 AND impact >= 6 AND published_at >= :s
-                         ORDER BY impact DESC, published_at LIMIT :n""", s=db.ago(hours=hours), n=top * 2):
+                         ORDER BY impact DESC, published_at LIMIT :n""", s=db.ago(hours=hours), n=top * 6):
+        key = it.get("story") or it["id"]
+        if key in seen:
+            continue
+        seen.add(key)
         topics = json.loads(it["topics"] or "[]")
         n, first_voice = voices_on(topics[0], hours=hours + 6) if topics else (0, None)
         lead = None

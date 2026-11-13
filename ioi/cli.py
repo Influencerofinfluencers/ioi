@@ -332,9 +332,11 @@ def main(argv=None):
             report = {s["key"]: per.get(s["key"], 0) for s in news.SOURCES}
             notify.status("IOI newswire check (items per source, 48h):\n" + "\n".join(f"{k}: {v}" for k, v in report.items())
                           + ("\nERRORS:\n" + "\n".join(f["errors"]) if f["errors"] else ""))
+            # re-label the newest 20 so the check always shows teasers from the current prompt
+            db.run("""UPDATE news SET labeled = 0 WHERE id IN (SELECT id FROM news ORDER BY fetched_at DESC LIMIT 20)""")
             lab = news.label_pending(limit=40)
-            samples = db.rows("""SELECT name, impact, title, teaser FROM news WHERE teaser IS NOT NULL AND teaser != ''
-                                 ORDER BY impact DESC, published_at DESC LIMIT 8""")
+            samples = db.rows("""SELECT name, impact, story, teaser FROM news WHERE teaser IS NOT NULL AND teaser != ''
+                                 AND labeled = 1 ORDER BY fetched_at DESC, impact DESC LIMIT 12""")
             _print({"per_source": report, "errors": f["errors"], "label": lab, "samples": samples})
         elif c == "scout":
             from . import scout

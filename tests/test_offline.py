@@ -465,7 +465,8 @@ def test_news_label_accepts_wrapped_json(env, monkeypatch):
     db = env
     db.run("""INSERT INTO news (id, source, name, kind, title, url, published_at, fetched_at, labeled)
               VALUES ('a', 's', 'S', 'media', 'Big headline', 'u', :t, :t, 0)""", t=db.iso(db.now()))
-    monkeypatch.setattr(llm, "complete", lambda *a, **k: '{"items": [{"i": 0, "topics": ["btc"], "impact": 7, "teaser": "Hook. Fact."}]}')
+    monkeypatch.setattr(llm, "complete", lambda *a, **k: '{"items": [{"i": 0, "topics": ["btc"], "impact": 7, "story": "Big Story!", "teaser": "Hook. Fact."}]}')
     assert news.label_pending()["labeled"] == 1
     r = db.rows("SELECT topics, impact, teaser FROM news WHERE id = 'a'")[0]
     assert r["topics"] == '["BTC"]' and r["impact"] == 7 and r["teaser"] == "Hook. Fact."
+    assert db.rows("SELECT story FROM news WHERE id = 'a'")[0]["story"] == "bigstory"
