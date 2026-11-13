@@ -120,8 +120,10 @@ def purge_old(days: int) -> int:
 
 def sync_accounts():
     """Load config/accounts.csv into the accounts table (keeps fetch state)."""
+    keys = []
     with open(config.ACCOUNTS_CSV, newline="", encoding="utf-8") as f:
         for r in csv.DictReader(f):
+            keys.append(r["key"].strip())
             run(
                 """INSERT INTO accounts (key, name, category, platform, handle, active)
                    VALUES (:key, :name, :category, :platform, :handle, :active)
@@ -136,6 +138,10 @@ def sync_accounts():
                 handle=r["handle"].strip(),
                 active=int(r.get("active", "1") or 1),
             )
+    # accounts removed from the CSV are switched off (history is kept)
+    if keys:
+        params = {f"k{i}": k for i, k in enumerate(keys)}
+        run(f"UPDATE accounts SET active = 0 WHERE key NOT IN ({', '.join(':' + p for p in params)})", **params)
 
 
 def upsert_post(p: dict) -> bool:

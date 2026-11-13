@@ -172,3 +172,14 @@ def test_niche_profile_prompt():
     from ioi import config, label
 
     assert "crypto" in config.AUDIENCE and "BTC" in label.system_prompt()
+
+
+def test_removed_accounts_are_deactivated(env, tmp_path, monkeypatch):
+    from ioi import config
+
+    db = env
+    csv_path = tmp_path / "a.csv"
+    csv_path.write_text("key,name,category,platform,handle,active\nwu,Wu,news,x,WuBlockchain,1\n")
+    monkeypatch.setattr(config, "ACCOUNTS_CSV", csv_path)
+    db.sync_accounts()
+    assert db.rows("SELECT COUNT(*) AS n FROM accounts WHERE active = 1")[0]["n"] == 1
