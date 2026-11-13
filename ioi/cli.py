@@ -238,6 +238,19 @@ def main(argv=None):
             _print(cmd_cycle(args))
         elif c == "daily":
             _print(cmd_daily(args))
+        elif c == "llm-check":
+            from . import config, llm
+
+            res = {}
+            chain = [(config.WRITE_PROVIDER, config.WRITE_MODEL)] + [("openai", m) for m in config.LLM_FALLBACK_MODELS]
+            for prov, mdl in chain:
+                try:
+                    out = llm._one("Reply with the single word OK.", "ping", mdl, 10, prov)
+                    res[mdl] = "ok" if out and out.strip() else "empty"
+                except Exception as e:  # noqa: BLE001
+                    res[mdl] = "fail: " + str(e)[:120]
+            notify.status("IOI AI check:\n" + "\n".join(f"{k}: {v}" for k, v in res.items()))
+            _print(res)
         elif c == "pro-check":
             from . import pro
 

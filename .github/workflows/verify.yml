@@ -24,6 +24,11 @@ jobs:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_STATUS_CHAT_ID: ${{ secrets.TELEGRAM_STATUS_CHAT_ID }}
       TELEGRAM_PRO_CHAT_ID: ${{ secrets.TELEGRAM_PRO_CHAT_ID }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+      LLM_FALLBACK_MODELS: ${{ vars.LLM_FALLBACK_MODELS }}
+      WRITE_MODEL: ${{ vars.WRITE_MODEL || 'claude-sonnet-5-5' }}
       WHOP_API_KEY: ${{ secrets.WHOP_API_KEY }}
       WHOP_COMPANY_ID: ${{ vars.WHOP_COMPANY_ID || 'biz_GUESEKFlsYSx61' }}
       WHOP_PRODUCT_ID: ${{ vars.WHOP_PRODUCT_ID || 'prod_o2ZmqDV2AoSr0' }}
@@ -37,4 +42,6 @@ jobs:
       - run: python -m pytest -q tests
       - run: python -m ioi.cli verify
       - run: python -m ioi.cli pro-check
+        continue-on-error: true
+      - run: python -m ioi.cli llm-check
         continue-on-error: true
