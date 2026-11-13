@@ -8,7 +8,8 @@ Commands
   analyze         detect attention surges, send Pro alerts
   digest          write today's digest and post it to the free Telegram channel
   publish         build website, leaderboard and RSS into ./public
-  cycle           fetch + label + analyze   (every 30 minutes)
+  cycle           fetch + label + analyze + Pro access (one round)
+  loop            run cycle every --every min for --minutes min (used by GitHub Actions)
   daily           digest + publish + cleanup (once a day)
   social          write + post one highlight on X, Bluesky and the free channel
   pro-check       check bot rights in the Pro channel + Whop access (no personal data)
@@ -54,6 +55,29 @@ def cmd_cycle(args):
     return stats
 
 
+def cmd_loop(args):
+    """Run a cycle every --every minutes for --minutes minutes (GitHub cron is unreliable,
+    so one long job keeps the 10-minute rhythm). One failing cycle never stops the loop."""
+    import time
+
+    end = time.time() + args.minutes * 60
+    every = args.every * 60
+    n = 0
+    while time.time() < end - 60:
+        start = time.time()
+        try:
+            db.reset_engine()
+            cmd_cycle(args)
+        except Exception as e:  # noqa: BLE001
+            notify.status(f"IOI cycle in loop FAILED: {str(e)[:400]}")
+        n += 1
+        wait = every - (time.time() - start)
+        if time.time() + wait >= end - 60:
+            break
+        time.sleep(max(5, wait))
+    return {"cycles": n}
+
+
 def cmd_daily(args):
     from . import config, digest, influence, publish
 
@@ -86,6 +110,8 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog="ioi", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("command")
     p.add_argument("--platform", default=None)
+    p.add_argument("--minutes", type=int, default=340)
+    p.add_argument("--every", type=int, default=10)
     args = p.parse_args(argv)
     c = args.command
 
@@ -130,6 +156,8 @@ def main(argv=None):
             from . import publish
 
             _print(publish.build_site())
+        elif c == "loop":
+            _print(cmd_loop(args))
         elif c == "cycle":
             _print(cmd_cycle(args))
         elif c == "daily":

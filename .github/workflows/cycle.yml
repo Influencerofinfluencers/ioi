@@ -2,9 +2,10 @@ name: cycle (fetch + label + alerts)
 
 on:
   schedule:
-    # Public repository = unlimited free Actions minutes, so every 10 minutes.
-    # (A private repo on the free plan should use "7,37 * * * *": every 30 minutes.)
-    - cron: "3,13,23,33,43,53 * * * *"
+    # GitHub delays/skips frequent cron runs, so each run is ONE long job that runs a cycle
+    # every 10 minutes for ~5h40m. The hourly schedule only makes sure a next job is queued
+    # (concurrency keeps one running + one waiting). Public repo = free minutes.
+    - cron: "7 * * * *"
   workflow_dispatch: {}
 
 concurrency:
@@ -14,7 +15,7 @@ concurrency:
 jobs:
   cycle:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 355
     env:
       NICHE: ${{ vars.NICHE || 'crypto' }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -55,4 +56,4 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
-      - run: python -m ioi.cli cycle
+      - run: python -m ioi.cli loop --minutes ${{ github.event_name == 'workflow_dispatch' && '30' || '340' }} --every 10
