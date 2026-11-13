@@ -174,7 +174,10 @@ def main(argv=None):
             from . import publish, weekly
 
             r = weekly.build()
-            notify.digest(r["markdown"])
+            from . import config
+
+            notify.send(config.TELEGRAM_PRO_CHAT_ID, notify.md_to_telegram(r["markdown"]))  # full: Pro only
+            notify.digest(publish.teaser(r["markdown"]) + publish._pro_note())  # free channel: teaser
             publish.build_site()
             print(r["markdown"])
         else:

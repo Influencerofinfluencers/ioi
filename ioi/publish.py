@@ -31,6 +31,17 @@ def _page(title: str, body: str) -> str:
 <p class="small">{html.escape(config.DISCLAIMER)}</p></body></html>"""
 
 
+def teaser(md: str) -> str:
+    """Public part of a Pro report: everything before the second '## ' heading."""
+    parts = md.split("\n## ")
+    return "\n## ".join(parts[:2]) if len(parts) > 2 else md
+
+
+def _pro_note() -> str:
+    link = config.PRO_CHECKOUT_URL or config.SITE_URL + "/#pricing"
+    return f"\n\n**The rest of this playbook is for IOI Pro members.** [Get IOI Pro]({link})"
+
+
 def _cta() -> str:
     if config.PRO_CHECKOUT_URL:
         return (f'<p class="cta"><strong>Want these signals live?</strong> IOI Pro sends an alert the moment several top '
@@ -53,7 +64,7 @@ def build_site() -> dict:
     (out / "weekly").mkdir(parents=True, exist_ok=True)
     for r in reports:
         (out / "weekly" / f"{r['id']}.html").write_text(
-            _page(r["title"], md_lib.markdown(r["markdown"], extensions=["tables"])), encoding="utf-8"
+            _page(r["title"], md_lib.markdown(teaser(r["markdown"]) + _pro_note(), extensions=["tables"])), encoding="utf-8"
         )
 
     # daily pages + index
@@ -115,7 +126,7 @@ def build_site() -> dict:
         e.id(f"{config.SITE_URL}/weekly/{r['id']}.html")
         e.title(r["title"])
         e.link(href=f"{config.SITE_URL}/weekly/{r['id']}.html")
-        e.description(md_lib.markdown(r["markdown"]))
+        e.description(md_lib.markdown(teaser(r["markdown"]) + _pro_note()))
         e.pubDate(_dt(r["created_at"]))
     for a in reversed(alerts[:30]):
         e = fg.add_entry()

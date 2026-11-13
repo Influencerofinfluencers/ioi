@@ -301,3 +301,11 @@ def test_pro_access_flow(env, monkeypatch):
     assert [c[0] for c in calls][:3] == ["getUpdates", "banChatMember", "unbanChatMember"]
     calls.clear()
     assert pro.sync()["removed"] == 0  # removed only once
+
+
+def test_weekly_teaser_hides_pro_part():
+    from ioi.publish import teaser
+
+    md = "# T\nintro\n## What worked\nA\n## Copy this next week\nSECRET\n## Best time\nX"
+    t = teaser(md)
+    assert "What worked" in t and "SECRET" not in t
