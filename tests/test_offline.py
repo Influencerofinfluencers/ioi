@@ -76,7 +76,10 @@ def test_pipeline(env, monkeypatch):
     site = publish.build_site()
     from ioi import config
     feed = (config.PUBLIC_DIR / "feed.xml").read_text()
-    assert "<rss" in feed and "Attention surge" in feed
+    assert "<rss" in feed and "Attention surge" not in feed  # fresh Pro alerts stay out of the public feed
+    db.run("UPDATE alerts SET created_at = :t", t=db.ago(hours=4))
+    publish.build_site()
+    assert "Attention surge" in (config.PUBLIC_DIR / "feed.xml").read_text()
     assert (config.PUBLIC_DIR / "leaderboard.html").exists()
     assert site["leaderboard"] == 50
 

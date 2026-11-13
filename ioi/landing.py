@@ -75,7 +75,7 @@ PAGE = Template("""<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <title>IOI – Influencer of Influencers · who moves crypto, and who said it first</title>
 <meta name="description" content="Every morning: what crypto's 50 most influential voices are saying, where they agree, and who said it first. Free daily brief, live alerts for Pro.">
 <meta property="og:title" content="IOI – Influencer of Influencers"><meta property="og:description" content="What crypto's 50 most influential voices say. And who said it first.">
-<meta property="og:image" content="$site/assets/IOI-X-banner.png"><meta name="twitter:card" content="summary_large_image">
+<meta property="og:image" content="$site/assets/IOI-deel-afbeelding.png"><meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="$site/assets/IOI-favicon.ico">
 <link rel="alternate" type="application/rss+xml" title="IOI" href="$site/feed.xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -95,9 +95,9 @@ PAGE = Template("""<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 </div>
 <aside class="card-dark" aria-label="Attention right now">
 <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px"><h2 style="margin:0;font-size:20px">Attention right now</h2>
-<span class="mono" style="font-size:12px;color:#A9B0BC">LIVE · last 24h</span></div>
+<span class="mono" style="font-size:12px;color:#A9B0BC">LAST 24H · HOURLY</span></div>
 $attention
-<p style="margin:0;font-size:12px;color:#A9B0BC;border-top:1px solid #262B33;padding-top:12px">Bars = share of the $n tracked accounts talking about the topic. Updated $updated. Pro members get surges live, with alerts.</p>
+<p style="margin:0;font-size:12px;color:#A9B0BC;border-top:1px solid #262B33;padding-top:12px">Bars = share of the $n tracked accounts talking about the topic. Updated $updated, refreshed every hour. Pro members get surges live, with alerts.</p>
 </aside></section>
 
 <section class="strip" aria-label="Sources"><div class="wrap"><span style="font-weight:600;color:#0E1116">$n voices tracked 24/7 on</span>$platforms</div></section>

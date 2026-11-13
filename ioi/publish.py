@@ -59,7 +59,9 @@ def build_site() -> dict:
     out = config.PUBLIC_DIR
     (out / "daily").mkdir(parents=True, exist_ok=True)
     digests = db.rows("SELECT * FROM digests ORDER BY day DESC LIMIT 60")
-    alerts = db.rows("SELECT * FROM alerts ORDER BY created_at DESC LIMIT 50")
+    # public outputs only show Pro alerts after the delay (Pro gets them live on Telegram)
+    alerts = db.rows("SELECT * FROM alerts WHERE created_at <= :late ORDER BY created_at DESC LIMIT 50",
+                     late=db.ago(hours=config.TEASER_DELAY_HOURS))
     reports = db.rows("SELECT * FROM reports WHERE kind = 'weekly' ORDER BY created_at DESC LIMIT 20")
     (out / "weekly").mkdir(parents=True, exist_ok=True)
     for r in reports:
@@ -131,7 +133,7 @@ def build_site() -> dict:
     for a in reversed(alerts[:30]):
         e = fg.add_entry()
         e.id(f"{config.SITE_URL}/alerts/{a['id']}")
-        e.title(f"Attention surge: {a['topic']}")
+        e.title(f"Attention surge: {a['topic']} (Pro members got this {config.TEASER_DELAY_HOURS}h earlier)")
         e.link(href=f"{config.SITE_URL}/leaderboard.html")
         e.description(html.escape(a["message"]))
         e.pubDate(_dt(a["created_at"]))

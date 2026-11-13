@@ -75,7 +75,7 @@ def _maybe_social():
     return social.run_once()
 
 
-def _dispatch(workflow: str) -> bool:
+def _dispatch(workflow: str, inputs: dict | None = None) -> bool:
     import os
 
     import httpx
@@ -85,7 +85,7 @@ def _dispatch(workflow: str) -> bool:
         return False
     r = httpx.post(f"https://api.github.com/repos/{repo}/actions/workflows/{workflow}/dispatches",
                    headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
-                   json={"ref": "main"}, timeout=30)
+                   json={"ref": "main", **({"inputs": inputs} if inputs else {})}, timeout=30)
     return r.status_code == 204
 
 
@@ -105,6 +105,11 @@ def _maybe_scheduled_jobs():
         if _dispatch("daily.yml"):
             pro._kv("daily_started", today)
             started.append("daily")
+    hour_mark = now.strftime("%Y-%m-%dT%H")
+    if "daily" not in started and pro._kv("site_refreshed") != hour_mark and now.minute >= 20:
+        if _dispatch("daily.yml", {"publish_only": "true"}):  # website + feed every hour
+            pro._kv("site_refreshed", hour_mark)
+            started.append("site")
     if now.weekday() == 0 and mins >= 6 * 60 + 23 and pro._kv("weekly_started") != today:
         if _dispatch("weekly.yml"):
             pro._kv("weekly_started", today)
@@ -124,7 +129,9 @@ def cmd_loop(args):
         start = time.time()
         try:
             db.reset_engine()
-            cmd_cycle(args)
+            st = cmd_cycle(args)
+            print(f"cycle {n + 1}: " + json.dumps({"new_posts": st["fetch"]["new_posts"], "errors": len(st["fetch"]["errors"]),
+                  "labeled": st["label"].get("labeled"), "alerts": st["alerts"], "pro": st.get("pro")}), flush=True)
         except Exception as e:  # noqa: BLE001
             notify.status(f"IOI cycle in loop FAILED: {str(e)[:400]}")
         try:
