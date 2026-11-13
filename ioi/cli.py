@@ -55,6 +55,63 @@ def cmd_cycle(args):
     return stats
 
 
+SOCIAL_SLOTS_UTC = ((10, 15), (14, 45), (19, 25))  # ~11:15, 15:45, 20:25 Amsterdam (winter)
+
+
+def _maybe_social():
+    """Highlight posts from inside the loop (GitHub skips cron runs). At most one per slot."""
+    from datetime import datetime, timezone
+
+    from . import social
+
+    now = datetime.now(timezone.utc)
+    minute_of_day = now.hour * 60 + now.minute
+    due = [h * 60 + m for h, m in SOCIAL_SLOTS_UTC if 0 <= minute_of_day - (h * 60 + m) < 60]
+    if not due:
+        return None
+    last = db.rows("SELECT MAX(created_at) AS t FROM social_posts")[0]["t"]
+    if last and last >= db.ago(hours=3):
+        return None
+    return social.run_once()
+
+
+def _dispatch(workflow: str) -> bool:
+    import os
+
+    import httpx
+
+    token, repo = os.environ.get("GH_TOKEN"), os.environ.get("GITHUB_REPOSITORY")
+    if not (token and repo):
+        return False
+    r = httpx.post(f"https://api.github.com/repos/{repo}/actions/workflows/{workflow}/dispatches",
+                   headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+                   json={"ref": "main"}, timeout=30)
+    return r.status_code == 204
+
+
+def _maybe_scheduled_jobs():
+    """Daily digest after 05:41 UTC, weekly playbook Mondays after 06:23 UTC - started from the loop,
+    once per day/week (kv marks), so a skipped GitHub cron never means a missing issue."""
+    from datetime import datetime, timezone
+
+    from . import pro
+
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    mins = now.hour * 60 + now.minute
+    started = []
+    if mins >= 5 * 60 + 41 and pro._kv("daily_started") != today and not db.rows(
+            "SELECT day FROM digests WHERE day = :d", d=today):
+        if _dispatch("daily.yml"):
+            pro._kv("daily_started", today)
+            started.append("daily")
+    if now.weekday() == 0 and mins >= 6 * 60 + 23 and pro._kv("weekly_started") != today:
+        if _dispatch("weekly.yml"):
+            pro._kv("weekly_started", today)
+            started.append("weekly")
+    return started
+
+
 def cmd_loop(args):
     """Run a cycle every --every minutes for --minutes minutes (GitHub cron is unreliable,
     so one long job keeps the 10-minute rhythm). One failing cycle never stops the loop."""
@@ -70,6 +127,14 @@ def cmd_loop(args):
             cmd_cycle(args)
         except Exception as e:  # noqa: BLE001
             notify.status(f"IOI cycle in loop FAILED: {str(e)[:400]}")
+        try:
+            _maybe_scheduled_jobs()
+        except Exception as e:  # noqa: BLE001
+            notify.status(f"IOI could not start daily/weekly: {str(e)[:300]}")
+        try:
+            _maybe_social()
+        except Exception as e:  # noqa: BLE001
+            notify.status(f"IOI social post FAILED: {str(e)[:400]}")
         n += 1
         wait = every - (time.time() - start)
         if time.time() + wait >= end - 60:
@@ -82,6 +147,10 @@ def cmd_daily(args):
     from . import config, digest, influence, publish
 
     started = db.now()
+    today = db.iso(db.now())[:10]
+    if db.rows("SELECT day FROM digests WHERE day = :d", d=today):
+        site = publish.build_site()  # already done today (cron + loop both fired): only refresh the site
+        return {"skipped": "digest for today already sent", "site": site}
     purged = db.purge_old(config.RETENTION_DAYS)
     d = digest.build()
     notify.digest(d["markdown"])
@@ -173,8 +242,12 @@ def main(argv=None):
         elif c == "weekly":
             from . import publish, weekly
 
-            r = weekly.build()
             from . import config
+
+            if db.rows("SELECT id FROM reports WHERE kind = 'weekly' AND created_at >= :s", s=db.ago(hours=20)):
+                _print({"skipped": "weekly playbook already sent today"})
+                return 0
+            r = weekly.build()
 
             notify.send(config.TELEGRAM_PRO_CHAT_ID, notify.md_to_telegram(r["markdown"]))  # full: Pro only
             notify.digest(publish.teaser(r["markdown"]) + publish._pro_note())  # free channel: teaser

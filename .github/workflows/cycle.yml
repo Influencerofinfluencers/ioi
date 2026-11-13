@@ -8,6 +8,10 @@ on:
     - cron: "7 * * * *"
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+  actions: write # lets the loop start the daily/weekly workflows itself
+
 concurrency:
   group: ioi-cycle
   cancel-in-progress: false
@@ -18,6 +22,7 @@ jobs:
     timeout-minutes: 355
     env:
       NICHE: ${{ vars.NICHE || 'crypto' }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
       X_MAX_RESULTS: ${{ vars.X_MAX_RESULTS || '20' }}
@@ -34,6 +39,18 @@ jobs:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
       LABEL_MODEL: ${{ vars.LABEL_MODEL || 'claude-haiku-5-5' }}
+      WRITE_PROVIDER: ${{ vars.WRITE_PROVIDER || vars.LLM_PROVIDER || 'anthropic' }}
+      WRITE_MODEL: ${{ vars.WRITE_MODEL || 'claude-sonnet-5-5' }}
+      DIGEST_LANGUAGE: ${{ vars.DIGEST_LANGUAGE || 'English' }}
+      BRAND: ${{ vars.BRAND || 'IOI - Influencer of Influencers' }}
+      SOCIAL_ENABLED: ${{ vars.SOCIAL_ENABLED || '1' }}
+      SOCIAL_MAX_PER_DAY: ${{ vars.SOCIAL_MAX_PER_DAY || '3' }}
+      X_API_KEY: ${{ secrets.X_API_KEY }}
+      X_API_SECRET: ${{ secrets.X_API_SECRET }}
+      X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+      X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+      BLUESKY_HANDLE: ${{ vars.BLUESKY_HANDLE }}
+      BLUESKY_APP_PASSWORD: ${{ secrets.BLUESKY_APP_PASSWORD }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_STATUS_CHAT_ID: ${{ secrets.TELEGRAM_STATUS_CHAT_ID }}
       TELEGRAM_PRO_CHAT_ID: ${{ secrets.TELEGRAM_PRO_CHAT_ID }}

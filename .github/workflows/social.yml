@@ -1,11 +1,7 @@
 name: social (automatic highlight posts)
 
 on:
-  schedule:
-    # 3x a day, when crypto Twitter is busiest (UTC): 10:17, 14:47, 19:27
-    - cron: "17 10 * * *"
-    - cron: "47 14 * * *"
-    - cron: "27 19 * * *"
+  # Scheduled posts run inside the cycle loop (GitHub skips cron runs). This is for a manual post.
   workflow_dispatch: {}
 
 concurrency:
