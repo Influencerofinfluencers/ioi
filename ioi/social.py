@@ -92,8 +92,13 @@ def _oauth1(method: str, url: str) -> str:
     return "OAuth " + ", ".join(f'{enc(k)}="{enc(v)}"' for k, v in sorted(p.items()))
 
 
+X_MEDIA = {"last": None}  # result of the last X media upload, reported in the status message
+
+
 def _x_upload(image) -> str | None:
     """Upload a PNG to X (v2 media endpoint, v1.1 as backup). None = post without image."""
+    X_MEDIA["last"] = None
+    problems = []
     for url, id_of in ((f"{config.X_API_BASE}/media/upload", lambda j: (j.get("data") or {}).get("id")),
                        ("https://upload.twitter.com/1.1/media/upload.json", lambda j: j.get("media_id_string"))):
         try:
@@ -102,10 +107,14 @@ def _x_upload(image) -> str | None:
                                files={"media": ("card.png", fh, "image/png")},
                                data={"media_category": "tweet_image"}, timeout=60)
             if r.status_code in (200, 201) and id_of(r.json()):
+                X_MEDIA["last"] = "ok"
                 return id_of(r.json())
             log.warning("X media upload %s: %s %s", url, r.status_code, r.text[:200])
+            problems.append(f"{url.split('/')[2]} {r.status_code} {r.text[:120]}")
         except Exception as e:  # noqa: BLE001
             log.warning("X media upload failed: %s", e)
+            problems.append(str(e)[:120])
+    X_MEDIA["last"] = "failed: " + " | ".join(problems)
     return None
 
 
@@ -209,12 +218,16 @@ def _publish(topic: str, text: str, image=None, extra_status: str = "") -> dict:
     for name, fn, body in (("x", post_x, text), ("bluesky", post_bluesky, with_link), ("telegram", post_telegram, with_link)):
         try:
             results[name] = fn(body, image)
+            if name == "x" and image and X_MEDIA["last"]:
+                results["x_image"] = X_MEDIA["last"]
+                if X_MEDIA["last"] != "ok":
+                    errors.append("X posted without card: " + X_MEDIA["last"])
         except Exception as e:  # noqa: BLE001 - one platform failing must not stop the others
             results[name] = "error"
             errors.append(f"{name}: {e}")
     db.run("INSERT INTO social_posts (id, created_at, topic, text, results) VALUES (:id, :c, :t, :x, :r)",
            id=f"{topic}-{db.iso(db.now())}", c=db.iso(db.now()), t=topic, x=text, r=json.dumps(results))
-    posted = [k for k, v in results.items() if v not in ("skipped", "error", "failed")]
+    posted = [k for k, v in results.items() if k in ("x", "bluesky", "telegram") and v not in ("skipped", "error", "failed")]
     notify.status(f"IOI posted ({', '.join(posted) or 'nowhere'}{', with card' if image else ''}):\n{text}"
                   + ("\nERRORS: " + "; ".join(errors) if errors else "") + extra_status)
     return {"topic": topic, "text": text, "results": results, "errors": errors, "image": bool(image)}

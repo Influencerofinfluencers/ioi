@@ -2,7 +2,11 @@ name: social (automatic highlight posts)
 
 on:
   # Scheduled posts run inside the cycle loop (GitHub skips cron runs). This is for a manual post.
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "post = post a highlight now, status = only show the last posts and their results"
+        default: status
 
 concurrency:
   group: ioi-social
@@ -44,4 +48,4 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
-      - run: python -m ioi.cli social
+      - run: python -m ioi.cli ${{ inputs.mode == 'post' && 'social' || 'social-status' }}

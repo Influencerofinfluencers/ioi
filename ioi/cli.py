@@ -323,6 +323,8 @@ def main(argv=None):
             img = cards.highlight(cs[0], tracked) if cs else None
             ok = bool(img) and notify.photo(config.TELEGRAM_STATUS_CHAT_ID, img, "IOI card test (only you see this)")
             _print({"rendered": bool(img), "sent": ok})
+        elif c == "social-status":
+            _print(db.rows("SELECT created_at, topic, results FROM social_posts ORDER BY created_at DESC LIMIT 5"))
         elif c == "news-check":
             from . import news
 
