@@ -11,10 +11,43 @@ class LLMError(Exception):
     pass
 
 
-def complete(system: str, user: str, model: str, max_tokens: int = 2000, provider: str | None = None) -> str:
-    if (provider or config.LLM_PROVIDER) == "openai":
+_warned: set[str] = set()
+
+
+def _one(system, user, model, max_tokens, provider):
+    if provider == "openai":
         return _openai(system, user, model, max_tokens)
     return _anthropic(system, user, model, max_tokens)
+
+
+def complete(system: str, user: str, model: str, max_tokens: int = 2000, provider: str | None = None) -> str:
+    """Primary model first; on any failure (outage, rate limit, empty credit) the open-source
+    fallbacks take over one by one (OpenRouter or any OpenAI-compatible endpoint)."""
+    chain = [((provider or config.LLM_PROVIDER), model)]
+    if config.OPENAI_API_KEY:
+        chain += [("openai", m) for m in config.LLM_FALLBACK_MODELS if m and m != model]
+    errors = []
+    for i, (prov, mdl) in enumerate(chain):
+        try:
+            out = _one(system, user, mdl, max_tokens, prov)
+            if not out or not out.strip():
+                raise LLMError("empty reply")
+            if i > 0 and mdl not in _warned:
+                _warned.add(mdl)
+                _notify(f"IOI: AI fallback active - {chain[0][1]} failed ({errors[0][:120]}), now using {mdl}")
+            return out
+        except Exception as e:  # noqa: BLE001 - try the next model
+            errors.append(f"{mdl}: {str(e)[:200]}")
+    raise LLMError("all models failed: " + " | ".join(errors))
+
+
+def _notify(text: str):
+    try:
+        from . import notify
+
+        notify.status(text)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _anthropic(system, user, model, max_tokens):

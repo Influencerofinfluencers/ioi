@@ -312,3 +312,25 @@ def test_weekly_teaser_hides_pro_part():
     md = "# T\nintro\n## What worked\nA\n## Copy this next week\nSECRET\n## Best time\nX"
     t = teaser(md)
     assert "What worked" in t and "SECRET" not in t
+
+
+def test_llm_fallback_chain(monkeypatch):
+    from ioi import config, llm
+
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "or-key")
+    monkeypatch.setattr(config, "LLM_FALLBACK_MODELS", ["oss/a", "oss/b"])
+    monkeypatch.setattr(llm, "_notify", lambda t: None)
+    calls = []
+
+    def fake_one(system, user, model, max_tokens, provider):
+        calls.append((provider, model))
+        if model in ("claude-x", "oss/a"):
+            raise RuntimeError("down")
+        return "ok from " + model
+
+    monkeypatch.setattr(llm, "_one", fake_one)
+    assert llm.complete("s", "u", "claude-x", provider="anthropic") == "ok from oss/b"
+    assert calls == [("anthropic", "claude-x"), ("openai", "oss/a"), ("openai", "oss/b")]
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "")
+    with pytest.raises(llm.LLMError):
+        llm.complete("s", "u", "claude-x", provider="anthropic")
