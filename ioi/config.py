@@ -82,7 +82,7 @@ TELEGRAM_PRO_CHAT_ID = env("TELEGRAM_PRO_CHAT_ID")  # paid channel: realtime ale
 PRO_CHECKOUT_URL = env("PRO_CHECKOUT_URL")  # Whop checkout link for IOI Pro
 PRO_PRICE = env("PRO_PRICE", "€25")
 FREE_CHANNEL_URL = env("FREE_CHANNEL_URL")  # public t.me link of the free channel
-NEWSLETTER_URL = env("NEWSLETTER_URL")  # beehiiv subscribe page (later)
+NEWSLETTER_URL = env("NEWSLETTER_URL")  # e-mail signup page (defaults to our own /subscribe.html when Kit is set up)
 CONTACT_URL = env("CONTACT_URL")  # where "Request access" (Data API) goes
 X_PROFILE_URL = env("X_PROFILE_URL")
 BLUESKY_PROFILE_URL = env("BLUESKY_PROFILE_URL")
@@ -101,7 +101,8 @@ NEWS_ENABLED = env("NEWS_ENABLED", "1") not in ("0", "false", "no")
 CRYPTOPANIC_TOKEN = env("CRYPTOPANIC_TOKEN")
 SEC_CONTACT_EMAIL = env("SEC_CONTACT_EMAIL")
 KIT_API_KEY = env("KIT_API_KEY")  # Kit (free Newsletter plan) V4 API key - e-mail edition of the daily digest
-KIT_TEMPLATE_ID = env("KIT_TEMPLATE_ID")  # SEC EDGAR requires a contact e-mail in the User-Agent  # optional free token from cryptopanic.com/developers/api
+KIT_TEMPLATE_ID = env("KIT_TEMPLATE_ID")
+KIT_FORM_ID = env("KIT_FORM_ID") or "10188905"  # public Kit signup form (IOI daily briefing (website))  # SEC EDGAR requires a contact e-mail in the User-Agent  # optional free token from cryptopanic.com/developers/api
 
 # --- automatic social posts (highlights) ---
 SOCIAL_ENABLED = env("SOCIAL_ENABLED", "1") not in ("0", "false", "no", "")
@@ -128,3 +129,6 @@ CATEGORIES = PROFILE.get("categories", ["opinion", "promo_spam", "other"])
 TOPIC_RULES = PROFILE.get("topic_rules", "Short UPPER_SNAKE topic names. Merge synonyms.")
 VOICE = PROFILE.get("voice", "a smart friend explaining things in plain language. No hype.")
 CONTENT_RULES = PROFILE.get("rules", "Never give advice. Describe what influential accounts say.")
+
+if not NEWSLETTER_URL and KIT_FORM_ID:
+    NEWSLETTER_URL = SITE_URL.rstrip("/") + "/subscribe.html"

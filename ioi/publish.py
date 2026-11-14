@@ -98,7 +98,7 @@ def account_pages(board: list[dict]) -> list[str]:
 
 def write_sitemap(digests, reports, pages):
     out = config.PUBLIC_DIR
-    urls = ["", "leaderboard.html", "daily/"] + [f"daily/{d['day']}.html" for d in digests] \
+    urls = ["", "leaderboard.html", "daily/"] + (["subscribe.html"] if config.KIT_FORM_ID else []) + [f"daily/{d['day']}.html" for d in digests] \
         + [f"weekly/{r['id']}.html" for r in reports] + pages
     today = db.iso(db.now())[:10]
     xml = "".join(f"<url><loc>{html.escape(config.SITE_URL)}/{u}</loc><lastmod>{today}</lastmod></url>" for u in urls)
@@ -139,6 +139,17 @@ def build_site() -> dict:
     from . import landing
 
     (out / "index.html").write_text(landing.build(digests[0]["markdown"] if digests else None), encoding="utf-8")
+    if config.KIT_FORM_ID:
+        (out / "subscribe.html").write_text(_page(
+            f"{config.BRAND} - daily brief by email",
+            "<h1>The 3-minute crypto attention brief, in your inbox</h1>"
+            "<p>Every morning: the topics crypto's 50 most influential voices agree on, who moved first, "
+            "and links to every source. Plain English, no hype, no shilling. Free.</p>"
+            + landing.email_form()
+            + '<p class="small">You will get one confirmation email first. Unsubscribe with one click, any time. '
+              "We never share your address.</p>"
+            + (f'<p>Prefer Telegram? <a href="{config.FREE_CHANNEL_URL}">Join the free channel</a>.</p>'
+               if config.FREE_CHANNEL_URL else "")), encoding="utf-8")
     assets = config.ROOT / "assets"
     if assets.exists():
         (out / "assets").mkdir(exist_ok=True)

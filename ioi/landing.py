@@ -132,7 +132,7 @@ $attention
 <div class="plans">
 <div class="plan"><h3 style="margin:0;font-size:22px">Free</h3><p style="margin:0"><span class="price">€0</span> <span class="soft">forever</span></p>
 <p class="soft" style="margin:0;font-size:15px">For anyone who wants the signal without the noise.</p>
-<ul><li>Daily brief on Telegram</li><li>RSS feed</li><li>IOI Top 50, updated daily</li><li>Pro alerts, $delay hours later</li></ul>$free_btn</div>
+<ul><li>Daily brief on Telegram and by email</li><li>RSS feed</li><li>IOI Top 50, updated daily</li><li>Pro alerts, $delay hours later</li></ul>$free_btn</div>
 <div class="plan pro"><div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0;font-size:22px">Pro</h3><span class="pill">Most popular</span></div>
 <p style="margin:0"><span class="price">$pro_price</span> <span style="color:#C9CED6">/ month</span></p>
 <p style="margin:0;font-size:15px;color:#C9CED6">For active traders and writers who want it first.</p>
@@ -200,12 +200,14 @@ def build(latest_digest_md: str | None) -> str:
     hero = _btn(free_url, free_label, "dark", "Free channel opening soon") + _btn(f"{site}/feed.xml", "RSS feed", "ghost")
     if config.PRO_CHECKOUT_URL:
         hero += _btn(config.PRO_CHECKOUT_URL, "Get live alerts (Pro)", "lime")
+    hero += email_form()
     nav_cta = f'<a class="btn dark" style="min-height:44px;padding:0 18px;font-size:15px;color:#F6F6F2" href="{esc(free_url)}">Subscribe free</a>' if free_url else ""
     pro_btn = _btn(config.PRO_CHECKOUT_URL, "Go Pro", "lime", "Pro opens soon")
     api_btn = _btn(config.CONTACT_URL, "Request access", "dark", "Coming soon")
     final = _btn(free_url, free_label, "lime", "Opening soon")
 
-    links = [("RSS", f"{site}/feed.xml"), ("Telegram", config.FREE_CHANNEL_URL), ("X", config.X_PROFILE_URL),
+    links = [("RSS", f"{site}/feed.xml"), ("Email", f"{site}/subscribe.html" if config.KIT_FORM_ID else ""),
+             ("Telegram", config.FREE_CHANNEL_URL), ("X", config.X_PROFILE_URL),
              ("Bluesky", config.BLUESKY_PROFILE_URL), ("Archive", f"{site}/daily/"), ("Top 50", f"{site}/leaderboard.html")]
     footer_links = "".join(f'<a href="{esc(u)}">{t}</a>' for t, u in links if u)
 
@@ -217,3 +219,17 @@ def build(latest_digest_md: str | None) -> str:
         pro_price=esc(config.PRO_PRICE), pro_btn=pro_btn, api_btn=api_btn, final_cta=final,
         disclaimer=esc(config.DISCLAIMER), footer_links=footer_links, delay=config.TEASER_DELAY_HOURS,
     )
+
+
+def email_form(dark: bool = False) -> str:
+    """Inline e-mail signup that posts straight to Kit (double opt-in handled by Kit)."""
+    if not config.KIT_FORM_ID:
+        return ""
+    fg, bg, border = ("#F6F6F2", "#0E1116", "#2A2F38") if dark else ("#0E1116", "#FFFFFF", "#D9DCE1")
+    return (f'<form action="https://app.kit.com/forms/{config.KIT_FORM_ID}/subscriptions" method="post" '
+            f'style="display:flex;flex-wrap:wrap;gap:8px;width:100%;margin-top:14px" aria-label="Get the daily brief by email">'
+            f'<input type="email" name="email_address" required placeholder="Your email for the 3-minute daily brief" '
+            f'style="flex:1 1 240px;min-height:44px;padding:0 16px;border-radius:999px;border:1px solid {border};'
+            f'background:{bg};color:{fg};font:15px Inter,system-ui,sans-serif">'
+            f'<button type="submit" style="min-height:44px;padding:0 20px;border-radius:999px;border:0;background:#C8FF3D;'
+            f'color:#0E1116;font:600 15px Inter,system-ui,sans-serif;cursor:pointer">Email me the brief</button></form>')
