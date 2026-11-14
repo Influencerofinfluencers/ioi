@@ -153,6 +153,12 @@ def sync_accounts():
                 """INSERT INTO accounts (key, name, category, platform, handle, active)
                    VALUES (:key, :name, :category, :platform, :handle, :active)
                    ON CONFLICT (key) DO UPDATE SET
+                     platform_user_id = CASE WHEN accounts.platform = excluded.platform
+                                             AND accounts.handle = excluded.handle
+                                             THEN accounts.platform_user_id ELSE NULL END,
+                     last_seen_id = CASE WHEN accounts.platform = excluded.platform
+                                         AND accounts.handle = excluded.handle
+                                         THEN accounts.last_seen_id ELSE NULL END,
                      name = excluded.name, category = excluded.category,
                      platform = excluded.platform, handle = excluded.handle,
                      active = excluded.active""",

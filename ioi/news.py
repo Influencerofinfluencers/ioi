@@ -42,17 +42,40 @@ SOURCES = [
     # hack / exploit alerts
     {"key": "peckshield", "name": "PeckShieldAlert", "kind": "hack", "type": "x", "handle": "PeckShieldAlert"},
     {"key": "certik", "name": "CertiK Alert", "kind": "hack", "type": "x", "handle": "CertiKAlert"},
+    {"key": "binance_delist", "name": "Binance delistings", "kind": "listing", "type": "binance", "catalog": 161},
+    {"key": "okx_listings", "name": "OKX listings", "kind": "listing", "type": "okx"},
+    {"key": "hyperliquid_perps", "name": "Hyperliquid new markets", "kind": "listing", "type": "hyperliquid"},
+    {"key": "hyperliquid_ann", "name": "Hyperliquid", "kind": "listing", "type": "telegram", "handle": "hyperliquid_announcements"},
+    {"key": "coinbase_status", "name": "Coinbase status", "kind": "outage", "type": "rss",
+     "url": "https://status.coinbase.com/history.rss"},
+    # law enforcement (seizures, arrests, indictments)
+    {"key": "doj_press", "name": "US Justice Dept", "kind": "regulator", "type": "rss", "filter": True,
+     "url": "https://www.justice.gov/news/rss?type=press_release&m=1"},
     # fast wires
     {"key": "bwenews", "name": "BWEnews", "kind": "wire", "type": "telegram", "handle": "BWEnews"},
+    {"key": "walterbloomberg", "name": "Walter Bloomberg", "kind": "wire", "type": "telegram", "handle": "walterbloomberg"},
+    {"key": "zachxbt_tg", "name": "ZachXBT Investigations", "kind": "hack", "type": "telegram", "handle": "investigations"},
+    # Trump's posts move markets; unofficial public archive of Truth Social, always labelled as such
+    {"key": "trump_truth", "name": "Trump on Truth Social (via trumpstruth.org)", "kind": "wire", "type": "rss",
+     "url": "https://trumpstruth.org/feed"},
+    # prediction markets: big odds moves on crypto questions
+    {"key": "polymarket", "name": "Polymarket", "kind": "market", "type": "polymarket"},
+    # protocol / tech releases
+    {"key": "btc_core", "name": "Bitcoin Core releases", "kind": "tech", "type": "rss",
+     "url": "https://github.com/bitcoin/bitcoin/releases.atom"},
+    {"key": "eth_blog", "name": "Ethereum Foundation blog", "kind": "tech", "type": "rss", "url": "https://blog.ethereum.org/feed.xml"},
     # established media (headline + link only)
     {"key": "coindesk_rss", "name": "CoinDesk", "kind": "media", "type": "rss", "url": "https://www.coindesk.com/arc/outboundfeeds/rss/"},
     {"key": "cointelegraph_rss", "name": "Cointelegraph", "kind": "media", "type": "rss", "url": "https://cointelegraph.com/rss"},
     {"key": "theblock_rss", "name": "The Block", "kind": "media", "type": "rss", "url": "https://www.theblock.co/rss.xml"},
     {"key": "btcmag_rss", "name": "Bitcoin Magazine", "kind": "media", "type": "rss", "url": "https://bitcoinmagazine.com/.rss/full/"},
+    {"key": "decrypt_rss", "name": "Decrypt", "kind": "media", "type": "rss", "url": "https://decrypt.co/feed"},
+    {"key": "blockworks_rss", "name": "Blockworks", "kind": "media", "type": "rss", "url": "https://blockworks.co/feed"},
+    {"key": "dlnews_rss", "name": "DL News", "kind": "media", "type": "rss", "url": "https://www.dlnews.com/arc/outboundfeeds/rss/"},
     # aggregator (only if a free CryptoPanic token is configured)
     {"key": "cryptopanic", "name": "CryptoPanic", "kind": "media", "type": "cryptopanic"},
 ]
-FAST_KINDS = {"listing", "regulator", "filing", "hack", "wire"}
+FAST_KINDS = {"listing", "regulator", "filing", "hack", "wire", "outage", "market"}
 MAX_FAILS = 5
 
 
@@ -115,7 +138,8 @@ def _edgar(src):
 
 def _binance(src):
     r = httpx.get("https://www.binance.com/bapi/composite/v1/public/cms/article/list/query",
-                  params={"type": 1, "catalogId": 48, "pageNo": 1, "pageSize": 15}, headers=UA, timeout=30)
+                  params={"type": 1, "catalogId": src.get("catalog", 48), "pageNo": 1, "pageSize": 15},
+                  headers=UA, timeout=30)
     r.raise_for_status()
     cats = (r.json().get("data") or {}).get("catalogs") or []
     arts = cats[0].get("articles", []) if cats else []
@@ -132,6 +156,63 @@ def _upbit(src):
     notices = (r.json().get("data") or {}).get("notices") or []
     return [{"title": n["title"], "url": f"https://upbit.com/service_center/notice?id={n['id']}",
              "at": _ts(n.get("listed_at") or n.get("first_listed_at") or "")} for n in notices if n.get("title")]
+
+
+def _okx(src):
+    r = httpx.get("https://www.okx.com/api/v5/support/announcements",
+                  params={"annType": "announcements-new-listings"}, headers=UA, timeout=30)
+    r.raise_for_status()
+    data = r.json().get("data") or []
+    details = data[0].get("details", []) if data else []
+    return [{"title": d["title"], "url": d.get("url") or "https://www.okx.com/help/section/announcements-new-listings",
+             "at": _ts(int(d.get("pTime") or 0))} for d in details if d.get("title")]
+
+
+def _hyperliquid(src):
+    """New perpetual markets: compare the live market list with the one we saw last time."""
+    r = httpx.post("https://api.hyperliquid.xyz/info", json={"type": "meta"}, timeout=30)
+    r.raise_for_status()
+    names = sorted({u["name"] for u in r.json().get("universe", []) if not u.get("isDelisted")})
+    if not names:
+        raise ValueError("Hyperliquid meta: empty universe")
+    st = _state(src["key"])
+    known = set(st.get("markets") or [])
+    st["markets"] = names
+    _save_state(src["key"], {**_state(src["key"]), "markets": names})
+    if not known:  # first run: remember, report nothing
+        return []
+    now = db.iso(db.now())
+    return [{"title": f"Hyperliquid lists a new perpetual market: {n}-USD", "at": now,
+             "url": f"https://app.hyperliquid.xyz/trade/{n}"} for n in names if n not in known]
+
+
+POLY_MOVE = 0.10  # report a crypto prediction market when its odds move 10+ points between checks
+
+
+def _polymarket(src):
+    r = httpx.get("https://gamma-api.polymarket.com/markets",
+                  params={"limit": 200, "active": "true", "closed": "false", "order": "volume24hr", "ascending": "false"},
+                  headers=UA, timeout=30)
+    r.raise_for_status()
+    st = _state(src["key"])
+    last = st.get("odds") or {}
+    odds, out = {}, []
+    for m in r.json():
+        q = m.get("question") or ""
+        if not CRYPTO.search(q) or float(m.get("volume24hr") or 0) < 50_000:
+            continue
+        try:
+            p = float(json.loads(m.get("outcomePrices") or "[]")[0])
+        except (ValueError, IndexError, TypeError):
+            continue
+        key = str(m.get("id"))
+        odds[key] = p
+        if key in last and abs(p - last[key]) >= POLY_MOVE:
+            out.append({"title": f"Polymarket: odds on \"{q}\" moved from {last[key]:.0%} to {p:.0%}",
+                        "url": f"https://polymarket.com/event/{m.get('slug') or ''}", "at": db.iso(db.now()),
+                        "uid": f"{p:.2f}"})
+    _save_state(src["key"], {**_state(src["key"]), "odds": odds})
+    return out
 
 
 def _cryptopanic(src):
@@ -168,7 +249,8 @@ def _social(src):
              "x_read": src["type"] == "x"} for p in posts if p.get("text")]
 
 
-FETCH = {"rss": _rss, "edgar": _edgar, "binance": _binance, "upbit": _upbit, "cryptopanic": _cryptopanic, "x": _social, "telegram": _social}
+FETCH = {"rss": _rss, "edgar": _edgar, "binance": _binance, "okx": _okx, "hyperliquid": _hyperliquid,
+         "polymarket": _polymarket, "upbit": _upbit, "cryptopanic": _cryptopanic, "x": _social, "telegram": _social}
 
 
 def fetch_all() -> dict:
@@ -197,7 +279,7 @@ def fetch_all() -> dict:
             stats["x_reads"] += 1 if it.get("x_read") else 0
             if it["at"] < db.ago(hours=48):  # no backlog of old items on first run
                 continue
-            nid = src["key"] + ":" + hashlib.sha1(it["url"].encode()).hexdigest()[:16]
+            nid = src["key"] + ":" + hashlib.sha1((it["url"] + it.get("uid", "")).encode()).hexdigest()[:16]
             if db.rows("SELECT 1 AS x FROM news WHERE id = :id", id=nid):
                 continue
             db.run("""INSERT INTO news (id, source, name, kind, title, url, published_at, fetched_at, labeled)
@@ -214,7 +296,10 @@ SYSTEM = """You label crypto news headlines for {brand} and write a teaser for e
 For each item return:
 - topics: 1-3, {topic_rules}
 - impact: 1-10 (9-10 = market-moving right now: a major exchange listing, an ETF filing/approval,
-  a big hack, a regulator action; 1-3 = minor)
+  a big hack, a regulator action; 1-3 = minor). General wires (Walter Bloomberg, Trump on Truth Social)
+  also carry non-crypto news: anything without a clear link to crypto, rates, the dollar or risk markets
+  gets impact 1. A Trump post counts only when it is about crypto, tariffs, the Fed or the economy, and the
+  teaser must say it is a Truth Social post (never present it as confirmed policy).
 - story: a short lowercase slug naming the underlying event (e.g. "doj-seizes-dprk-binance-funds").
   Several outlets covering the same event MUST get the same slug. If an event matches one of the
   known stories listed below, reuse that exact slug.

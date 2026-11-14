@@ -107,7 +107,7 @@ def test_x_adapter(env, monkeypatch):
     assert len([k for k in rep["ok"]]) >= 34  # all X accounts resolved in one batched call
     assert sum(1 for u in calls if u.path.endswith("/users/by")) == 1
     s = fetch.fetch_all("x")
-    assert s["accounts"] == 34 and s["new_posts"] == 1  # same fake post id for everyone -> stored once
+    assert s["accounts"] == 31 and s["new_posts"] == 1  # same fake post id for everyone -> stored once
     acc = env.rows("SELECT last_seen_id FROM accounts WHERE key = 'vitalik'")[0]
     assert acc["last_seen_id"] == "555"
     first_call = [u for u in calls if "/tweets" in u.path][0]
@@ -536,3 +536,51 @@ def test_datafeed_never_first():
           {"account_key": "wu", "account_category": "news", "created_at": "2026-11-14T02:00:00Z"}]
     assert influence._first(ms)["account_key"] == "wu"
     assert influence._first(ms[:1])["account_key"] == "whale"  # only a feed: fall back
+
+
+def test_platform_switch_resets_fetch_state(env, tmp_path, monkeypatch):
+    from ioi import config, db
+
+    csv1 = tmp_path / "a.csv"
+    csv1.write_text("key,name,category,platform,handle,active\nwu,Wu,news,x,WuBlockchain,1\n")
+    monkeypatch.setattr(config, "ACCOUNTS_CSV", csv1)
+    db.sync_accounts()
+    db.run("UPDATE accounts SET platform_user_id = '123', last_seen_id = '999' WHERE key = 'wu'")
+    db.sync_accounts()  # unchanged: state kept
+    assert db.rows("SELECT last_seen_id FROM accounts WHERE key='wu'")[0]["last_seen_id"] == "999"
+    csv1.write_text("key,name,category,platform,handle,active\nwu,Wu,news,telegram,wublockchainenglish,1\n")
+    db.sync_accounts()
+    r = db.rows("SELECT platform, platform_user_id, last_seen_id FROM accounts WHERE key='wu'")[0]
+    assert r["platform"] == "telegram" and r["platform_user_id"] is None and r["last_seen_id"] is None
+
+
+def test_new_newswire_fetchers(env, monkeypatch):
+    from ioi import news
+
+    class R:
+        def __init__(self, data):
+            self._d = data
+            self.status_code = 200
+
+        def json(self):
+            return self._d
+
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr(news.httpx, "post", lambda *a, **k: R({"universe": [{"name": "BTC"}, {"name": "ETH"}]}))
+    assert news._hyperliquid({"key": "hl"}) == []  # first run only remembers
+    monkeypatch.setattr(news.httpx, "post", lambda *a, **k: R({"universe": [{"name": "BTC"}, {"name": "ETH"}, {"name": "NEW"}]}))
+    assert [i["title"] for i in news._hyperliquid({"key": "hl"})] == ["Hyperliquid lists a new perpetual market: NEW-USD"]
+
+    mk = lambda p: [{"id": 1, "question": "Will Bitcoin hit $100k in 2026?", "slug": "btc-100k", "volume24hr": 90000,
+                     "outcomePrices": f'["{p}", "{1 - p}"]'}]
+    monkeypatch.setattr(news.httpx, "get", lambda *a, **k: R(mk(0.30)))
+    assert news._polymarket({"key": "pm"}) == []
+    monkeypatch.setattr(news.httpx, "get", lambda *a, **k: R(mk(0.45)))
+    out = news._polymarket({"key": "pm"})
+    assert len(out) == 1 and "30% to 45%" in out[0]["title"]
+
+    monkeypatch.setattr(news.httpx, "get", lambda *a, **k: R({"data": [{"details": [
+        {"title": "OKX to list XYZ", "url": "https://okx.com/help/xyz", "pTime": "1763100000000"}]}]}))
+    assert news._okx({"key": "okx"})[0]["title"] == "OKX to list XYZ"
