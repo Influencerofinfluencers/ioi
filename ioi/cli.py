@@ -386,8 +386,6 @@ def main(argv=None):
                         from .sources import youtube
 
                         out["parsed"] = youtube.parse_videos_page(r.text)[:3]
-                        i = r.text.find('"lockupViewModel"')
-                        out["raw"] = r.text[i:i + 200] + " ... " + r.text[r.text.find('metadataParts', i):][:600]
                 except Exception as e:  # noqa: BLE001
                     out[k] = f"error {e}"[:150]
             _print(out)

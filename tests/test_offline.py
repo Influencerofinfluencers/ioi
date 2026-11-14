@@ -508,7 +508,7 @@ def test_youtube_videos_page_fallback(env, monkeypatch):
     data = {"x": [{"lockupViewModel": {"contentId": "abc123", "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
             "metadata": {"lockupMetadataViewModel": {"title": {"content": "Bitcoin Drops Below $70k"},
              "metadata": {"contentMetadataViewModel": {"metadataRows": [{"metadataParts": [
-                 {"text": {"content": "102K views"}}, {"text": {"content": "7 hours ago"}}]}]}}}}}},
+                 {"text": {"content": "102K"}}, {"text": {"content": "7h ago"}}]}]}}}}}},
             {"lockupViewModel": {"contentId": "old1", "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
              "metadata": {"lockupMetadataViewModel": {"title": {"content": "Old"}, "metadata": {
                  "contentMetadataViewModel": {"metadataRows": [{"metadataParts": [
@@ -525,3 +525,5 @@ def test_youtube_videos_page_fallback(env, monkeypatch):
     monkeypatch.setattr(youtube.httpx, "get", lambda url, **k: R(404, "") if "feeds" in url else R(200, html))
     posts = youtube.fetch({"key": "cowen", "platform_user_id": "UCx", "last_seen_id": ""})
     assert [p["id"] for p in posts] == ["youtube:abc123"] and posts[0]["views"] == 102000
+    assert youtube._ago("2mo ago") == 2 * 2592000 and youtube._ago("Streamed 3 hours ago") == 3 * 3600
+    assert youtube._ago("12m ago") == 720

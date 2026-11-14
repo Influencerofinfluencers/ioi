@@ -48,9 +48,17 @@ BROWSER = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
 UNITS = {"second": 1, "minute": 60, "hour": 3600, "day": 86400, "week": 604800, "month": 2592000, "year": 31536000}
 
 
+SHORT = {"s": "second", "m": "minute", "min": "minute", "h": "hour", "d": "day", "w": "week",
+         "mo": "month", "y": "year", "yr": "year"}
+
+
 def _ago(text: str) -> int | None:
-    m = re.search(r"(\d+)\s+(second|minute|hour|day|week|month|year)s?\s+ago", text or "")
-    return int(m.group(1)) * UNITS[m.group(2)] if m else None
+    """'7 hours ago', 'Streamed 2 days ago' or the compact '7h ago' / '2mo ago'."""
+    m = re.search(r"(\d+)\s*(second|minute|hour|day|week|month|year|mo|min|yr|s|m|h|d|w|y)s?\s+ago", text or "")
+    if not m:
+        return None
+    unit = SHORT.get(m.group(2), m.group(2))
+    return int(m.group(1)) * UNITS[unit]
 
 
 def _count(text: str) -> int:
@@ -88,8 +96,8 @@ def parse_videos_page(html: str) -> list[dict]:
                  (((meta.get("metadata") or {}).get("contentMetadataViewModel") or {}).get("metadataRows") or [])
                  for p in row.get("metadataParts") or []]
         age = next((a for a in map(_ago, parts) if a is not None), None)
-        views = next((_count(p) for p in parts if "view" in p.lower()), 0)
-        out.append({"vid": l["contentId"], "title": (meta.get("title") or {}).get("content", ""), "parts": parts,
+        views = next((_count(p) for p in parts if "ago" not in p and re.match(r"[\d.,]+\s*[KMB]?\b", p)), 0)
+        out.append({"vid": l["contentId"], "title": (meta.get("title") or {}).get("content", ""),
                     "age": age, "views": views})
     return out
 
