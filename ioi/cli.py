@@ -410,8 +410,8 @@ def main(argv=None):
             per = {r["source"]: r["n"] for r in db.rows(
                 "SELECT source, COUNT(*) AS n FROM news WHERE fetched_at >= :s GROUP BY source", s=db.ago(hours=48))}
             report = {s["key"]: per.get(s["key"], 0) for s in news.SOURCES}
-            notify.status("IOI newswire check (items per source, 48h):\n" + "\n".join(f"{k}: {v}" for k, v in report.items())
-                          + ("\nERRORS:\n" + "\n".join(f["errors"]) if f["errors"] else ""))
+            if f["errors"]:
+                notify.status("IOI newswire check ERRORS:\n" + "\n".join(f["errors"]))
             # re-label the newest 20 so the check always shows teasers from the current prompt
             db.run("""UPDATE news SET labeled = 0 WHERE id IN (SELECT id FROM news ORDER BY fetched_at DESC LIMIT 20)""")
             lab = news.label_pending(limit=40)

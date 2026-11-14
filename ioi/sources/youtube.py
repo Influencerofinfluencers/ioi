@@ -106,17 +106,26 @@ def _fetch_page(account: dict, last: str) -> list[dict]:
     """Fallback when the RSS feed is blocked for cloud IPs (seen since Nov 2026)."""
     from .. import db
 
-    r = httpx.get(PAGE.format(cid=account["platform_user_id"]), headers=BROWSER, timeout=30, follow_redirects=True)
-    r.raise_for_status()
-    vids = parse_videos_page(r.text)
-    if not vids:
-        raise ValueError("YouTube videos page: no videos parsed (layout changed?)")
+    vids, pages_ok = [], 0
+    for tab in ("videos", "streams", "shorts"):  # some channels only stream or only post Shorts
+        r = httpx.get(PAGE.format(cid=account["platform_user_id"]).replace("/videos", "/" + tab),
+                      headers=BROWSER, timeout=30, follow_redirects=True)
+        if r.status_code >= 400:
+            continue
+        pages_ok += 1
+        if "ytInitialData" not in r.text:
+            continue
+        vids += parse_videos_page(r.text)
+    if not pages_ok:
+        r.raise_for_status()
     known = {x["id"] for x in db.rows("SELECT id FROM posts WHERE account_key = :a AND platform = 'youtube'",
                                       a=account["key"])}
     now = datetime.now(timezone.utc)
     posts = []
     for v in vids:
         pid = f"youtube:{v['vid']}"
+        if any(p["id"] == pid for p in posts):
+            continue
         if pid in known or v["age"] is None or v["age"] > 7 * 86400:
             continue
         created = iso(now - timedelta(seconds=v["age"]))
