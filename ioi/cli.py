@@ -379,6 +379,20 @@ def main(argv=None):
                     "per_platform": {pl: sum(r["posts_7d"] for r in rows if r["platform"] == pl)
                                      for pl in sorted({r["platform"] for r in rows})},
                     "accounts": len(rows)})
+        elif c == "alert-check":
+            from . import config, influence
+
+            _print({"alerts_48h": db.rows("SELECT created_at, topic, message FROM alerts WHERE created_at >= :s ORDER BY created_at",
+                                          s=db.ago(hours=48)),
+                    "newswire_sent_48h": db.rows("""SELECT alerted, name, impact, teaser FROM news WHERE alerted IS NOT NULL
+                                                    AND alerted != 'skip' AND fetched_at >= :s ORDER BY alerted""", s=db.ago(hours=48)),
+                    "news_impact8_48h": db.rows("""SELECT published_at, fetched_at, name, kind, impact, alerted, title FROM news
+                                                   WHERE impact >= 8 AND fetched_at >= :s ORDER BY published_at""", s=db.ago(hours=48)),
+                    "posts_labeled_6h": db.rows("""SELECT COUNT(*) AS n FROM posts p JOIN labels l ON l.post_id = p.id
+                                                   WHERE p.created_at >= :s""", s=db.ago(hours=6))[0]["n"],
+                    "rules": {"window_h": config.ALERT_WINDOW_HOURS, "min_accounts": config.ALERT_MIN_ACCOUNTS},
+                    "consensus_6h": [{k: c[k] for k in ("topic", "accounts", "surge", "usual_per_day")}
+                                     for c in influence.consensus(hours=config.ALERT_WINDOW_HOURS, top=12)]})
         elif c == "news-debug":
             from . import news
 
