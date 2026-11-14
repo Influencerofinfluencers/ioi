@@ -63,5 +63,7 @@ jobs:
       - if: ${{ !inputs.news_only }}
         run: python -m ioi.cli scout
         continue-on-error: true
+      - run: python -m ioi.cli yt-check
+        continue-on-error: true
       - run: python -m ioi.cli news-check
         continue-on-error: true

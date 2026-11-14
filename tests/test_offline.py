@@ -488,11 +488,13 @@ def test_fetch_errors_reported_only_when_persistent(env, monkeypatch):
 
     sent = []
     monkeypatch.setattr(notify, "status", lambda t: sent.append(t))
-    cli._report_fetch_errors(["yt1: 500"])
+    cli._report_fetch_errors(["yt1: 500", "yt2: 404"])
     cli._report_fetch_errors(["yt1: 500", "yt2: 404"])
     assert sent == []
-    cli._report_fetch_errors(["yt1: 500"])
-    assert len(sent) == 1 and "yt1" in sent[0]
-    cli._report_fetch_errors([])  # recovered: counter resets
-    cli._report_fetch_errors(["yt1: 500"])
+    cli._report_fetch_errors(["yt1: 500", "yt2: 404"])
+    assert len(sent) == 1 and "yt1" in sent[0] and "yt2" in sent[0]
+    for _ in range(5):
+        cli._report_fetch_errors(["yt1: 500", "yt2: 404"])  # same set: quiet
     assert len(sent) == 1
+    cli._report_fetch_errors([])  # recovered
+    assert len(sent) == 2 and "fine again" in sent[1]

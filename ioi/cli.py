@@ -165,9 +165,9 @@ def _loop_alert(kind: str, text: str, every_min: int = 60):
         notify.status(text)
 
 
-def _report_fetch_errors(errors: list[str], after: int = 3, repeat: int = 36):
-    """Only report an account once it failed `after` cycles in a row (≈30 min), then every
-    `repeat` cycles (≈6 h). One-off hiccups (YouTube, X timeouts) stay silent."""
+def _report_fetch_errors(errors: list[str], after: int = 3, quiet_hours: int = 6):
+    """Accounts failing `after` cycles in a row are collected into ONE message, at most once per
+    `quiet_hours` (and again as soon as the set of failing accounts changes). One-off hiccups stay silent."""
     from . import pro
 
     try:
@@ -179,10 +179,19 @@ def _report_fetch_errors(errors: list[str], after: int = 3, repeat: int = 36):
         key = e.split(":", 1)[0].strip()
         now[key] = counts.get(key, 0) + 1
     pro._kv("fetch_fail_counts", json.dumps(now))
-    due = [e for e in errors if now[e.split(":", 1)[0].strip()] in (after,)
-           or (now[e.split(":", 1)[0].strip()] - after) % repeat == 0 and now[e.split(":", 1)[0].strip()] > after]
-    if due:
-        notify.status(f"IOI: fetch errors (failing {after}+ cycles in a row)\n" + "\n".join(e[:160] for e in due[:10]))
+    persistent = sorted(k for k, n in now.items() if n >= after)
+    last = json.loads(pro._kv("fetch_fail_reported") or '{"keys": [], "at": ""}')
+    fresh = [k for k in persistent if k not in last["keys"]]
+    stale = not last["at"] or last["at"] < db.ago(hours=quiet_hours)
+    if persistent and (fresh or stale):
+        pro._kv("fetch_fail_reported", json.dumps({"keys": persistent, "at": db.iso(db.now())}))
+        by_key = {e.split(":", 1)[0].strip(): e for e in errors}
+        notify.status(f"IOI: {len(persistent)} account(s) failing for 30+ min (next reminder in {quiet_hours}h, "
+                      "or when another account starts failing):\n"
+                      + "\n".join(by_key[k][:140] for k in persistent[:12]))
+    elif not persistent and last["keys"]:
+        pro._kv("fetch_fail_reported", json.dumps({"keys": [], "at": ""}))
+        notify.status("IOI: all accounts fetch fine again ✅")
 
 
 def cmd_loop(args):
@@ -356,6 +365,26 @@ def main(argv=None):
             img = cards.highlight(cs[0], tracked) if cs else None
             ok = bool(img) and notify.photo(config.TELEGRAM_STATUS_CHAT_ID, img, "IOI card test (only you see this)")
             _print({"rendered": bool(img), "sent": ok})
+        elif c == "yt-check":
+            import httpx
+
+            cid = "UCRvqjQPSeaWn-uEx-w0XOIg"  # Benjamin Cowen
+            ua = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
+                  "Accept-Language": "en-US,en;q=0.9"}
+            tries = {
+                "rss_channel": f"https://www.youtube.com/feeds/videos.xml?channel_id={cid}",
+                "rss_playlist": f"https://www.youtube.com/feeds/videos.xml?playlist_id=UU{cid[2:]}",
+                "rss_nowww": f"https://youtube.com/feeds/videos.xml?channel_id={cid}",
+                "videos_page": f"https://www.youtube.com/channel/{cid}/videos",
+            }
+            out = {}
+            for k, u in tries.items():
+                try:
+                    r = httpx.get(u, headers=ua, timeout=30, follow_redirects=True)
+                    out[k] = f"{r.status_code} len={len(r.text)} videoIds={r.text.count('videoId')} consent={'consent' in str(r.url)}"
+                except Exception as e:  # noqa: BLE001
+                    out[k] = f"error {e}"[:150]
+            _print(out)
         elif c == "social-status":
             rows = db.rows("SELECT created_at, topic, results FROM social_posts ORDER BY created_at DESC LIMIT 5")
             from . import config
