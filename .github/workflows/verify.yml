@@ -65,6 +65,8 @@ jobs:
         continue-on-error: true
       - run: python -m ioi.cli health
         continue-on-error: true
+      - run: python -m ioi.cli news-debug
+        continue-on-error: true
       - run: python -m ioi.cli src-check
         continue-on-error: true
       - run: python -m ioi.cli yt-check

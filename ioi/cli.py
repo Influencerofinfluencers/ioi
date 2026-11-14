@@ -379,6 +379,19 @@ def main(argv=None):
                     "per_platform": {pl: sum(r["posts_7d"] for r in rows if r["platform"] == pl)
                                      for pl in sorted({r["platform"] for r in rows})},
                     "accounts": len(rows)})
+        elif c == "news-debug":
+            from . import news
+
+            out = {}
+            for src in news.SOURCES:
+                if src["key"] not in ("okx_listings", "blockworks_rss", "dlnews_rss", "binance_delist", "doj_press"):
+                    continue
+                try:
+                    items = news.FETCH[src["type"]](src) or []
+                    out[src["key"]] = {"n": len(items), "newest": [(i["at"], i["title"][:60]) for i in items[:3]]}
+                except Exception as e:  # noqa: BLE001
+                    out[src["key"]] = f"error {str(e)[:150]}"
+            _print(out)
         elif c == "src-check":
             import httpx
 
