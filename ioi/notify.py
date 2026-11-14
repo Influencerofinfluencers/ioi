@@ -40,6 +40,8 @@ def _chunks(text: str):
 
 
 def send(chat_id: str, text: str, is_html: bool = True, buttons: list | None = None) -> bool:
+    if chat_id and chat_id == config.TELEGRAM_PRO_CHAT_ID:
+        _mark_pro_activity()
     if not (config.TELEGRAM_BOT_TOKEN and chat_id):
         log.info("telegram not configured, message:\n%s", text[:500])
         return False
@@ -120,3 +122,59 @@ def pro_teasers() -> int:
             db.run("UPDATE alerts SET teased_at = :t WHERE id = :id", t=db.iso(db.now()), id=a["id"])
             sent += 1
     return sent
+
+
+def _mark_pro_activity():
+    try:
+        from . import db
+        from .pro import _kv
+
+        _kv("pro_last_msg", db.iso(db.now()))
+    except Exception:  # noqa: BLE001 - bookkeeping must never block a message
+        pass
+
+
+PULSE_GAP_HOURS = 3
+PULSE_HOURS_UTC = range(7, 22)  # 08:00-22:59 Amsterdam (winter time)
+
+
+def pro_pulse(force: bool = False) -> bool:
+    """Keeps the Pro feed alive in quiet hours: when no alert went out for PULSE_GAP_HOURS,
+    a short data update (no AI, no advice): busiest topics among the 50 + top newswire items."""
+    from . import db, influence
+    from .pro import _kv
+
+    if not config.TELEGRAM_PRO_CHAT_ID:
+        return False
+    now = db.now()
+    last = _kv("pro_last_msg") or ""
+    if not force and (now.hour not in PULSE_HOURS_UTC or last > db.ago(hours=PULSE_GAP_HOURS)):
+        return False
+    topics = [c for c in influence.consensus(hours=6, top=10) if c["accounts"] >= 2][:3]
+    news = db.rows("""SELECT name, teaser, url, story, impact FROM news WHERE labeled = 1 AND impact >= 6
+                      AND teaser IS NOT NULL AND teaser != '' AND published_at >= :s
+                      ORDER BY impact DESC, published_at DESC LIMIT 8""", s=db.ago(hours=4))
+    seen, picked = set(), []
+    for n in news:
+        if (n["story"] or n["url"]) in seen:
+            continue
+        seen.add(n["story"] or n["url"])
+        picked.append(n)
+        if len(picked) == 2:
+            break
+    if not topics and not picked:
+        return False
+    tracked = db.rows("SELECT COUNT(*) AS n FROM accounts WHERE active = 1")[0]["n"]
+    lines = [f"📡 <b>IOI Pulse</b> · {now.strftime('%H:%M')} UTC · quiet market, no surge right now"]
+    if topics:
+        lines.append("\n<b>Most discussed (last 6h)</b>")
+        for c in topics:
+            trend = "above" if c["surge"] >= 1.2 else ("below" if c["surge"] < 0.8 else "around")
+            lines.append(f"• <b>{html.escape(c['topic'])}</b>: {c['accounts']} of {tracked} accounts, {trend} normal. "
+                         f"First: {html.escape(c['first']['name'])}")
+    if picked:
+        lines.append("\n<b>Newswire</b>")
+        for n in picked:
+            lines.append(f"• {html.escape(n['teaser'])} <a href=\"{n['url']}\">{html.escape(n['name'])}</a>")
+    lines.append("\n<i>You get an instant alert as soon as a topic surges. Attention data, not financial advice.</i>")
+    return send(config.TELEGRAM_PRO_CHAT_ID, "\n".join(lines))

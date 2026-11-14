@@ -59,7 +59,13 @@ def cmd_cycle(args):
     except Exception as e:  # noqa: BLE001 - Pro access must never stop the data pipeline
         pro_stats = {"error": str(e)[:300]}
         notify.status(f"IOI Pro sync failed: {str(e)[:300]}")
-    stats = {"fetch": f, "label": lab, "alerts": [a["topic"] for a in alerts], "teasers": teased, "pro": pro_stats, "news": news_stats}
+    try:
+        pulse = notify.pro_pulse()
+    except Exception as e:  # noqa: BLE001
+        pulse = False
+        notify.status(f"IOI Pro pulse failed: {str(e)[:200]}")
+    stats = {"fetch": f, "label": lab, "alerts": [a["topic"] for a in alerts], "teasers": teased, "pro": pro_stats,
+             "news": news_stats, "pulse": pulse}
     db.log_run("cycle", started, stats)
     _report_fetch_errors(f["errors"])
     if f.get("x_budget_hit"):

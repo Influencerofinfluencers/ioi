@@ -584,3 +584,22 @@ def test_new_newswire_fetchers(env, monkeypatch):
     monkeypatch.setattr(news.httpx, "get", lambda *a, **k: R({"data": [{"details": [
         {"title": "OKX to list XYZ", "url": "https://okx.com/help/xyz", "pTime": "1763100000000"}]}]}))
     assert news._okx({"key": "okx"})[0]["title"] == "OKX to list XYZ"
+
+
+def test_pro_pulse_only_when_quiet(env, monkeypatch):
+    from datetime import datetime, timezone
+
+    from ioi import config, db, influence, notify
+    from ioi.pro import _kv
+
+    sent = []
+    monkeypatch.setattr(config, "TELEGRAM_PRO_CHAT_ID", "-100pro")
+    monkeypatch.setattr(config, "TELEGRAM_BOT_TOKEN", "")  # send() just logs
+    monkeypatch.setattr(notify, "send", lambda chat, text, **k: sent.append(text) or True)
+    monkeypatch.setattr(db, "now", lambda: datetime(2026, 11, 14, 12, 0, tzinfo=timezone.utc))
+    monkeypatch.setattr(influence, "consensus", lambda **k: [
+        {"topic": "BTC", "accounts": 5, "surge": 0.5, "first": {"name": "Wu"}}])
+    _kv("pro_last_msg", "2026-11-14T11:00:00Z")  # alert 1h ago: stay quiet
+    assert notify.pro_pulse() is False and not sent
+    _kv("pro_last_msg", "2026-11-14T08:00:00Z")  # 4h quiet: pulse
+    assert notify.pro_pulse() is True and "BTC" in sent[0] and "below normal" in sent[0]

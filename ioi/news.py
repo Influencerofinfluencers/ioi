@@ -370,7 +370,7 @@ def voices_on(topic: str, hours: int = 6) -> tuple[int, str | None]:
     return len({m["account_key"] for m in ms}), first
 
 
-def newswire_alerts(min_impact: int = 8, max_age_min: int = 45) -> list[dict]:
+def newswire_alerts(min_impact: int = 7, max_age_min: int = 45) -> list[dict]:
     """Pro: a market-moving primary-source item, the moment it lands."""
     sent = []
     for it in db.rows("""SELECT * FROM news WHERE labeled = 1 AND alerted IS NULL AND impact >= :i
