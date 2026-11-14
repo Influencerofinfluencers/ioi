@@ -70,8 +70,7 @@ SOURCES = [
     {"key": "theblock_rss", "name": "The Block", "kind": "media", "type": "rss", "url": "https://www.theblock.co/rss.xml"},
     {"key": "btcmag_rss", "name": "Bitcoin Magazine", "kind": "media", "type": "rss", "url": "https://bitcoinmagazine.com/.rss/full/"},
     {"key": "decrypt_rss", "name": "Decrypt", "kind": "media", "type": "rss", "url": "https://decrypt.co/feed"},
-    {"key": "blockworks_rss", "name": "Blockworks", "kind": "media", "type": "rss", "url": "https://blockworks.co/feed"},
-    {"key": "dlnews_rss", "name": "DL News", "kind": "media", "type": "rss", "url": "https://www.dlnews.com/arc/outboundfeeds/rss/"},
+    # Blockworks + DL News RSS feeds tested Nov 2026: stale (no new items for weeks), not used
     # aggregator (only if a free CryptoPanic token is configured)
     {"key": "cryptopanic", "name": "CryptoPanic", "kind": "media", "type": "cryptopanic"},
 ]
