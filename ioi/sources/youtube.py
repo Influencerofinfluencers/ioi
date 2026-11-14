@@ -89,7 +89,7 @@ def parse_videos_page(html: str) -> list[dict]:
                  for p in row.get("metadataParts") or []]
         age = next((a for a in map(_ago, parts) if a is not None), None)
         views = next((_count(p) for p in parts if "view" in p.lower()), 0)
-        out.append({"vid": l["contentId"], "title": (meta.get("title") or {}).get("content", ""),
+        out.append({"vid": l["contentId"], "title": (meta.get("title") or {}).get("content", ""), "parts": parts,
                     "age": age, "views": views})
     return out
 
