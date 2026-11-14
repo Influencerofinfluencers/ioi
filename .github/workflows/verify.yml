@@ -15,7 +15,7 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     env:
       NICHE: ${{ vars.NICHE || 'crypto' }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}

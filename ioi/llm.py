@@ -55,7 +55,7 @@ def _anthropic(system, user, model, max_tokens):
         raise LLMError("ANTHROPIC_API_KEY missing")
     import anthropic
 
-    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY, timeout=120, max_retries=1)  # never hang the loop
     msg = client.messages.create(
         model=model,
         max_tokens=max_tokens,
