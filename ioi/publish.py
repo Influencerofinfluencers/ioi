@@ -72,7 +72,8 @@ def account_pages(board: list[dict]) -> list[str]:
     for t in {m["topic"] for m in recent}:
         ms = sorted((m for m in recent if m["topic"] == t), key=lambda m: m["created_at"])
         if len({m["account_key"] for m in ms}) >= 3:
-            first_of.setdefault(ms[0]["account_key"], []).append((t, ms[0]["created_at"], len({m["account_key"] for m in ms})))
+            f = influence._first(ms)
+            first_of.setdefault(f["account_key"], []).append((t, f["created_at"], len({m["account_key"] for m in ms})))
     n = len(board)
     written = []
     for r in board:

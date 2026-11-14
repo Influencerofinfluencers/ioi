@@ -527,3 +527,12 @@ def test_youtube_videos_page_fallback(env, monkeypatch):
     assert [p["id"] for p in posts] == ["youtube:abc123"] and posts[0]["views"] == 102000
     assert youtube._ago("2mo ago") == 2 * 2592000 and youtube._ago("Streamed 3 hours ago") == 3 * 3600
     assert youtube._ago("12m ago") == 720
+
+
+def test_datafeed_never_first():
+    from ioi import influence
+
+    ms = [{"account_key": "whale", "account_category": "datafeed", "created_at": "2026-11-14T01:00:00Z"},
+          {"account_key": "wu", "account_category": "news", "created_at": "2026-11-14T02:00:00Z"}]
+    assert influence._first(ms)["account_key"] == "wu"
+    assert influence._first(ms[:1])["account_key"] == "whale"  # only a feed: fall back

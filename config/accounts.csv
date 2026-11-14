@@ -11,7 +11,7 @@ pomp,Anthony Pompliano,media,x,APompliano,1
 balchunas,Eric Balchunas,etf,x,EricBalchunas,1
 seyffart,James Seyffart,etf,x,JSeyff,1
 wu,Wu Blockchain,news,x,WuBlockchain,1
-tier10k,DB (tier10k),news,x,tier10k,1
+kobeissi,The Kobeissi Letter,macro,x,KobeissiLetter,1
 cointelegraph,Cointelegraph,news,x,Cointelegraph,1
 coindesk,CoinDesk,news,x,CoinDesk,1
 theblock,The Block,news,x,theblockco,1
@@ -32,7 +32,7 @@ cobie,Cobie,trader,x,cobie,1
 sherpa,Altcoin Sherpa,trader,x,AltcoinSherpa,1
 melker,Scott Melker,trader,x,scottmelker,1
 terrett,Eleanor Terrett,regulation,x,EleanorTerrett,1
-bbgcrypto,Bloomberg Crypto,news,x,crypto,1
+embercn,EmberCN,onchain,x,EmberCN,1
 coinbureau,Coin Bureau,educator,youtube,@CoinBureau,1
 altcoindaily,Altcoin Daily,news,youtube,@AltcoinDaily,1
 cowen,Benjamin Cowen,macro,youtube,UCRvqjQPSeaWn-uEx-w0XOIg,1
@@ -41,9 +41,9 @@ cryptosrus,CryptosRUs,trader,youtube,@CryptosRUs,1
 bankless,Bankless,media,youtube,@Bankless,1
 realvision,Real Vision,macro,youtube,@RealVisionFinance,1
 colin,Colin Talks Crypto,educator,youtube,@ColinTalksCrypto,1
-brianjung,Brian Jung,educator,youtube,@BrianJung,1
+paulbarron,Paul Barron Network,media,youtube,UC4VPa7EOvObpyCRI4YKRQRw,1
 casey,Crypto Casey,educator,youtube,@CryptoCasey,1
-whalealert,Whale Alert,onchain,telegram,whale_alert_io,1
+whalealert,Whale Alert,datafeed,telegram,whale_alert_io,1
 unfolded,Unfolded,news,telegram,unfolded,1
 ct_telegram,Cointelegraph (Telegram),news,telegram,cointelegraph,1
 binance_ann,Binance Announcements,exchange,telegram,binance_announcements,1

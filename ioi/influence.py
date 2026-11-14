@@ -7,6 +7,12 @@ from datetime import datetime, timedelta
 from . import config, db
 
 MIN_RELEVANCE = 3
+DATAFEED = "datafeed"  # automated feeds (e.g. Whale Alert): count for attention, never "first"
+
+
+def _first(ms: list[dict]) -> dict:
+    humans = [m for m in ms if m.get("account_category") != DATAFEED]
+    return min(humans or ms, key=lambda m: m["created_at"])
 
 
 def _parse(ts: str) -> datetime:
@@ -19,7 +25,7 @@ def mentions(since: str) -> list[dict]:
     for r in db.rows(
         """SELECT p.id, p.account_key, p.url, p.created_at, p.likes, p.replies, p.reposts,
                   p.views, a.name, a.followers, l.topics, l.sentiment, l.relevance, l.summary,
-                  l.category
+                  l.category, a.category AS account_category
            FROM posts p JOIN labels l ON l.post_id = p.id JOIN accounts a ON a.key = p.account_key
            WHERE p.created_at >= :since AND l.relevance >= :rel AND l.category <> 'promo_spam'
            ORDER BY p.created_at""",
@@ -52,7 +58,7 @@ def consensus(hours: int = 24, top: int = 15) -> list[dict]:
     for topic, ms in current.items():
         accounts = {m["account_key"]: m["name"] for m in ms}
         usual = len(baseline[topic]) / 7  # avg distinct accounts per day before
-        first = min(ms, key=lambda m: m["created_at"])
+        first = _first(ms)
         results.append(
             {
                 "topic": topic,
@@ -112,7 +118,7 @@ def leaderboard(days: int = 7) -> list[dict]:
             s = score[key]
             s["echo_pairs"].update((m["id"], f) for f in followers)
             s["topics"].add(topic)
-            if followers and min(first_seen.values(), key=lambda v: v["created_at"]) is m:
+            if followers and m.get("account_category") != DATAFEED and _first(list(first_seen.values())) is m:
                 s["first_posts"].add(m["id"])
     # engagement per account over the period
     for r in db.rows(
