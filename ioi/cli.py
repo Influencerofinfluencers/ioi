@@ -370,7 +370,11 @@ def main(argv=None):
                               FROM accounts a LEFT JOIN posts p ON p.account_key = a.key AND p.created_at >= :s
                               WHERE a.active = 1 GROUP BY a.key, a.platform, a.handle ORDER BY last_post""",
                            s=db.ago(days=7))
-            _print({"silent_7d": [r for r in rows if not r["posts_7d"]],
+            silent = [r for r in rows if not r["posts_7d"]]
+            for r in silent:
+                r.update(db.rows("SELECT platform_user_id, last_seen_id, last_checked, error FROM accounts WHERE key = :k",
+                                 k=r["key"])[0])
+            _print({"silent_7d": silent,
                     "quiet_48h": [r for r in rows if r["posts_7d"] and r["last_post"] < db.ago(hours=48)],
                     "per_platform": {pl: sum(r["posts_7d"] for r in rows if r["platform"] == pl)
                                      for pl in sorted({r["platform"] for r in rows})},
