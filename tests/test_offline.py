@@ -498,3 +498,30 @@ def test_fetch_errors_reported_only_when_persistent(env, monkeypatch):
     assert len(sent) == 1
     cli._report_fetch_errors([])  # recovered
     assert len(sent) == 2 and "fine again" in sent[1]
+
+
+def test_youtube_videos_page_fallback(env, monkeypatch):
+    import json as _j
+
+    from ioi.sources import youtube
+
+    data = {"x": [{"lockupViewModel": {"contentId": "abc123", "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+            "metadata": {"lockupMetadataViewModel": {"title": {"content": "Bitcoin Drops Below $70k"},
+             "metadata": {"contentMetadataViewModel": {"metadataRows": [{"metadataParts": [
+                 {"text": {"content": "102K views"}}, {"text": {"content": "7 hours ago"}}]}]}}}}}},
+            {"lockupViewModel": {"contentId": "old1", "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+             "metadata": {"lockupMetadataViewModel": {"title": {"content": "Old"}, "metadata": {
+                 "contentMetadataViewModel": {"metadataRows": [{"metadataParts": [
+                     {"text": {"content": "3 months ago"}}]}]}}}}}}]}
+    html = "<script>var ytInitialData = " + _j.dumps(data) + ";</script>"
+
+    class R:
+        def __init__(self, code, text):
+            self.status_code, self.text = code, text
+
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr(youtube.httpx, "get", lambda url, **k: R(404, "") if "feeds" in url else R(200, html))
+    posts = youtube.fetch({"key": "cowen", "platform_user_id": "UCx", "last_seen_id": ""})
+    assert [p["id"] for p in posts] == ["youtube:abc123"] and posts[0]["views"] == 102000

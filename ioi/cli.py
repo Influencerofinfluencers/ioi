@@ -382,6 +382,10 @@ def main(argv=None):
                 try:
                     r = httpx.get(u, headers=ua, timeout=30, follow_redirects=True)
                     out[k] = f"{r.status_code} len={len(r.text)} videoIds={r.text.count('videoId')} consent={'consent' in str(r.url)}"
+                    if k == "videos_page":
+                        from .sources import youtube
+
+                        out["parsed"] = youtube.parse_videos_page(r.text)[:3]
                 except Exception as e:  # noqa: BLE001
                     out[k] = f"error {e}"[:150]
             _print(out)
