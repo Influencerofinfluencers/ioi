@@ -301,7 +301,9 @@ def newswire_alerts(min_impact: int = 8, max_age_min: int = 45) -> list[dict]:
         topics = json.loads(it["topics"] or "[]")
         n, _ = voices_on(topics[0]) if topics else (0, None)
         tracked = db.rows("SELECT COUNT(*) AS n FROM accounts WHERE active = 1")[0]["n"]
-        lead = "none of our 50 voices are on it yet" if n == 0 else f"{n} of {tracked} voices already on it"
+        t = topics[0] if topics else "this topic"
+        lead = (f"quiet so far: none of our {tracked} voices posted about {t} in the last 6h" if n == 0
+                else f"{n} of {tracked} voices active on {t} in the last 6h")
         text = (f"\U0001F5DE <b>NEWSWIRE · {it['name']}</b>\n{notify.html.escape(it['teaser'] or it['title'])}\n"
                 f"<i>{lead}</i>\n<a href=\"{it['url']}\">Source</a>")
         notify.send(config.TELEGRAM_PRO_CHAT_ID, text)

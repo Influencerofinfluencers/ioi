@@ -107,8 +107,11 @@ def pro_teasers() -> int:
     sent = 0
     for a in due:
         n = len(json.loads(a["accounts"] or "[]"))
+        from datetime import datetime
+
+        age_h = int((db.now() - datetime.fromisoformat(a["created_at"].replace("Z", "+00:00"))).total_seconds() // 3600)
         text = (
-            f"⚡ <b>Pro members got this {config.TEASER_DELAY_HOURS}h ago</b> "
+            f"⚡ <b>Pro members got this {max(age_h, config.TEASER_DELAY_HOURS)}h ago</b> "
             f"({a['created_at'][11:16]} UTC)\n"
             f"<b>{html.escape(a['topic'])}</b>: {n} tracked accounts suddenly started talking about it.\n\n"
             f'Get alerts the moment they happen: <a href="{config.PRO_CHECKOUT_URL}">IOI Pro</a>'

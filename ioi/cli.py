@@ -365,6 +365,16 @@ def main(argv=None):
             img = cards.highlight(cs[0], tracked) if cs else None
             ok = bool(img) and notify.photo(config.TELEGRAM_STATUS_CHAT_ID, img, "IOI card test (only you see this)")
             _print({"rendered": bool(img), "sent": ok})
+        elif c == "health":
+            rows = db.rows("""SELECT a.key, a.platform, a.handle, MAX(p.created_at) AS last_post, COUNT(p.id) AS posts_7d
+                              FROM accounts a LEFT JOIN posts p ON p.account_key = a.key AND p.created_at >= :s
+                              WHERE a.active = 1 GROUP BY a.key, a.platform, a.handle ORDER BY last_post""",
+                           s=db.ago(days=7))
+            _print({"silent_7d": [r for r in rows if not r["posts_7d"]],
+                    "quiet_48h": [r for r in rows if r["posts_7d"] and r["last_post"] < db.ago(hours=48)],
+                    "per_platform": {pl: sum(r["posts_7d"] for r in rows if r["platform"] == pl)
+                                     for pl in sorted({r["platform"] for r in rows})},
+                    "accounts": len(rows)})
         elif c == "yt-check":
             import httpx
 

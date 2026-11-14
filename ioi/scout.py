@@ -15,9 +15,13 @@ EXPIRE_HOURS = 3
 
 SYSTEM = """You write short reply suggestions for the X account of {brand}, which tracks what the 50 most
 influential {audience} voices say and who said it first.
-For each post you get the post summary plus IOI data about that topic. Write ONE reply per post that adds
-a real data point from IOI (how many of the tracked accounts talk about it, who was first and when,
-how far above normal). Max 200 characters. Sound like a sharp human analyst, not a bot: never start with "IOI" or a label, vary the
+For each post you get the post summary plus IOI data about the post's broad TOPIC (e.g. all BTC talk).
+Write ONE reply per post that adds a real data point from IOI.
+CRUCIAL - be accurate: topic_accounts_24h, topic_first_voice and topic_surge describe the WHOLE topic over
+24 hours, NOT this specific story. Never claim that those accounts discussed this specific post/event, or
+that topic_first_voice was first on this story. Correct: "BTC is the loudest topic in our tracker today:
+21 of 50 accounts, ~3x normal." Wrong: "21 of 50 accounts picked up this purchase."
+You may also skip the numbers and react to the post with a sharp observation linked to the topic data. Max 200 characters. Sound like a sharp human analyst, not a bot: never start with "IOI" or a label, vary the
 opening (a reaction to the post, a question, a number), refer to what the post is about, and use "we track"
 at most once. Friendly, specific, no hype, no hashtags, no links, no @mentions, no exact timestamps unless
 it is striking (e.g. "hours before everyone else").
@@ -34,6 +38,8 @@ def candidates(n: int = 5, hours: int = 4) -> list[dict]:
     for m in sorted(influence.mentions(db.ago(hours=hours)), key=lambda m: -((m["likes"] or 0) + 2 * (m["reposts"] or 0))):
         if m["topic"] not in hot or m["account_key"] in seen_accounts or "x.com" not in (m["url"] or ""):
             continue
+        if sum(1 for o in out if o["topic"] == m["topic"]) >= 2:  # variety: max 2 suggestions per topic
+            continue
         c = hot[m["topic"]]
         seen_accounts.add(m["account_key"])
         out.append({"url": m["url"], "name": m["name"], "summary": m["summary"], "likes": m["likes"],
@@ -48,8 +54,9 @@ def run_once() -> dict:
     posts = candidates()
     if not posts:
         return {"skipped": "no hot posts right now"}
-    data = [{k: p[k] for k in ("name", "summary", "topic", "accounts", "tracked", "first", "first_at", "surge")}
-            for p in posts]
+    data = [{"name": p["name"], "post_summary": p["summary"], "topic": p["topic"],
+             "topic_accounts_24h": f'{p["accounts"]} of {p["tracked"]}', "topic_first_voice": p["first"],
+             "topic_first_at": p["first_at"], "topic_surge": p["surge"]} for p in posts]
     out = llm.complete(
         SYSTEM.format(brand=config.BRAND, audience=config.AUDIENCE, rules=config.CONTENT_RULES),
         "Posts (JSON, index = position):\n" + json.dumps(data, ensure_ascii=False, default=str),

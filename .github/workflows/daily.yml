@@ -62,4 +62,10 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: public
-      - uses: actions/deploy-pages@v4
+      - id: deploy
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+      - if: steps.deploy.outcome == 'failure'
+        run: sleep 45
+      - if: steps.deploy.outcome == 'failure'
+        uses: actions/deploy-pages@v4
