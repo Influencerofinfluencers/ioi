@@ -379,6 +379,40 @@ def main(argv=None):
                     "per_platform": {pl: sum(r["posts_7d"] for r in rows if r["platform"] == pl)
                                      for pl in sorted({r["platform"] for r in rows})},
                     "accounts": len(rows)})
+        elif c == "src-check":
+            import httpx
+
+            ua = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36"}
+            gets = {
+                "okx_listings": "https://www.okx.com/api/v5/support/announcements?annType=announcements-new-listings",
+                "bybit_listings": "https://api.bybit.com/v5/announcements/index?locale=en-US&type=new_crypto&limit=5",
+                "binance_delist": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&catalogId=161&pageNo=1&pageSize=5",
+                "bithumb_notice": "https://feed.bithumb.com/notice",
+                "doj_press": "https://www.justice.gov/news/rss?type=press_release&m=1",
+                "treasury_press": "https://home.treasury.gov/system/files/126/ofac.xml",
+                "btc_core_releases": "https://github.com/bitcoin/bitcoin/releases.atom",
+                "eth_blog": "https://blog.ethereum.org/feed.xml",
+                "truth_trump": "https://trumpstruth.org/feed",
+                "coinbase_status": "https://status.coinbase.com/history.rss",
+                "polymarket": "https://gamma-api.polymarket.com/markets?limit=3&order=volume24hr&ascending=false&active=true",
+                "tokenunlocks": "https://token.unlocks.app/",
+                "decrypt_rss": "https://decrypt.co/feed",
+                "blockworks_rss": "https://blockworks.co/feed",
+                "dlnews_rss": "https://www.dlnews.com/arc/outboundfeeds/rss/",
+            }
+            out = {}
+            for k, u in gets.items():
+                try:
+                    r = httpx.get(u, headers=ua, timeout=25, follow_redirects=True)
+                    out[k] = f"{r.status_code} {r.headers.get('content-type','')[:25]} {len(r.text)}b {r.text[:90]!r}"
+                except Exception as e:  # noqa: BLE001
+                    out[k] = f"error {str(e)[:100]}"
+            try:
+                r = httpx.post("https://api.hyperliquid.xyz/info", json={"type": "meta"}, timeout=25)
+                out["hyperliquid_meta"] = f"{r.status_code} universe={len(r.json().get('universe', []))}"
+            except Exception as e:  # noqa: BLE001
+                out["hyperliquid_meta"] = f"error {str(e)[:100]}"
+            _print(out)
         elif c == "yt-check":
             import httpx
 
