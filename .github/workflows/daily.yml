@@ -28,6 +28,7 @@ jobs:
     env:
       NICHE: ${{ vars.NICHE || 'crypto' }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      KIT_API_KEY: ${{ secrets.KIT_API_KEY }}
       SITE_URL: ${{ vars.SITE_URL }}
       BRAND: ${{ vars.BRAND || 'IOI - Influencer of Influencers' }}
       LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'anthropic' }}

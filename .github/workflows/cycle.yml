@@ -59,6 +59,7 @@ jobs:
       SITE_URL: ${{ vars.SITE_URL }}
       WHOP_API_KEY: ${{ secrets.WHOP_API_KEY }}
       SEC_CONTACT_EMAIL: ${{ vars.SEC_CONTACT_EMAIL }}
+      KIT_API_KEY: ${{ secrets.KIT_API_KEY }}
       CRYPTOPANIC_TOKEN: ${{ secrets.CRYPTOPANIC_TOKEN }}
       WHOP_COMPANY_ID: ${{ vars.WHOP_COMPANY_ID || 'biz_GUESEKFlsYSx61' }}
       WHOP_PRODUCT_ID: ${{ vars.WHOP_PRODUCT_ID || 'prod_o2ZmqDV2AoSr0' }}

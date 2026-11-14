@@ -603,3 +603,21 @@ def test_pro_pulse_only_when_quiet(env, monkeypatch):
     assert notify.pro_pulse() is False and not sent
     _kv("pro_last_msg", "2026-11-14T08:00:00Z")  # 4h quiet: pulse
     assert notify.pro_pulse() is True and "BTC" in sent[0] and "below normal" in sent[0]
+
+
+def test_kit_daily_once(env, monkeypatch):
+    from ioi import config, kit
+
+    calls = []
+
+    class R:
+        status_code = 201
+
+        def json(self):
+            return {"broadcast": {"id": 9, "status": "scheduled", "send_at": "x"}}
+
+    monkeypatch.setattr(config, "KIT_API_KEY", "kit_test")
+    monkeypatch.setattr(kit.httpx, "post", lambda url, json, headers, timeout: calls.append(json) or R())
+    assert kit.send_daily("Bitcoin Slips", "## Hello\n\n**BTC** text")["id"] == 9
+    assert "<h2>Hello</h2>" in calls[0]["content"] and calls[0]["subject"] == "Bitcoin Slips"
+    assert kit.send_daily("again", "x") == {"skipped": "already sent today"} and len(calls) == 1

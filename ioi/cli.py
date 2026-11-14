@@ -261,6 +261,13 @@ def cmd_daily(args):
     purged = db.purge_old(config.RETENTION_DAYS)
     d = digest.build()
     notify.digest(d["markdown"])
+    from . import kit
+
+    try:
+        mail = kit.send_daily(d["title"], d["markdown"])
+    except Exception as e:  # noqa: BLE001 - e-mail must never block the digest
+        mail = {"error": str(e)[:200]}
+        notify.status(f"IOI e-mail edition (Kit) failed: {str(e)[:200]}")
     site = publish.build_site()
     top = influence.leaderboard(days=7)[:3]
     runs = db.rows("SELECT stats FROM runs WHERE kind = 'cycle' AND started >= :s", s=db.ago(hours=24))
@@ -276,7 +283,7 @@ def cmd_daily(args):
         + f"\nX reads today: {db.x_reads_today()} · cleaned up: {purged} old posts"
         + "\nTop 3: " + ", ".join(r["name"] for r in top)
     )
-    stats = {"digest": d["title"], "site": site, "purged": purged, "warnings": warnings}
+    stats = {"digest": d["title"], "site": site, "purged": purged, "warnings": warnings, "mail": mail}
     db.log_run("daily", started, stats)
     return stats
 
@@ -385,6 +392,10 @@ def main(argv=None):
                     "per_platform": {pl: sum(r["posts_7d"] for r in rows if r["platform"] == pl)
                                      for pl in sorted({r["platform"] for r in rows})},
                     "accounts": len(rows)})
+        elif c == "kit-check":
+            from . import kit
+
+            _print(kit.check())
         elif c == "alert-check":
             from . import config, influence
 
